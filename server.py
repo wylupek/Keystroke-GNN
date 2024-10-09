@@ -28,8 +28,8 @@ async def upload_csv(request: Request):
             "duration": int(row[2])
         })
 
-    # Do something with the data (e.g., save to a database)
-    utils.print_csv(key_presses)
+    # TODO Add username from login
+    utils.add_csv_values(key_presses, "USER")
 
     return {"message": "CSV data received successfully"}
 
@@ -39,4 +39,6 @@ def main():
 
 
 if __name__ == "__main__":
+    utils.setup_database()
     main()
+    utils.drop_table()
