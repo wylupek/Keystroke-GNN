@@ -12,24 +12,24 @@ def read_root():
     return {"message": "Hello, World!"}
 
 @app.post("/upload-csv")
-async def upload_csv(request: Request):
+async def upload_csv(request: Request, username: str):
     # Read the CSV data from the request body
     csv_data = await request.body()
     csv_str = csv_data.decode('utf-8')
     csv_reader = csv.reader(StringIO(csv_str))
-    # Skip the header
     next(csv_reader)
 
     key_presses = []
     for row in csv_reader:
-        key_presses.append({
-            "key": row[0],
-            "press_time": int(row[1]),
-            "duration": int(row[2])
-        })
+        if len(row) == 3:
+            key_presses.append({
+                "key": row[0],
+                "press_time": int(row[1]),
+                "duration": int(row[2])
+            })
 
-    # TODO Add username from login
-    utils.add_csv_values(key_presses, "USER")
+    # Add the username from the query parameter
+    utils.add_csv_values(key_presses, username)
 
     return {"message": "CSV data received successfully"}
 
