@@ -2,9 +2,10 @@ import csv
 from fastapi import FastAPI, Request
 import uvicorn
 from io import StringIO
+import os
 
 from utils import database_utils
-from utils.database_utils import print_tsv
+from dotenv import load_dotenv
 
 app = FastAPI()
 
@@ -25,14 +26,14 @@ async def upload_tsv(request: Request, username: str):
         if len(row) == 6:
             key_presses.append({
                 "key": str(row[0]),
-                "press_time": int(row[1]),
-                "duration": int(row[2]),
-                "accel_x": float(row[3]),
-                "accel_y": float(row[4]),
-                "accel_z": float(row[5]),
+                "press_time": str(row[1]),
+                "duration": str(row[2]),
+                "accel_x": str(row[3]),
+                "accel_y": str(row[4]),
+                "accel_z": str(row[5]),
             })
-    print(username)
-    database_utils.print_tsv(key_presses)
+    # print(username)
+    # database_utils.print_tsv(key_presses)
 
     # Add the username from the query parameter
     database_utils.add_tsv_values(key_presses, username)
@@ -41,7 +42,11 @@ async def upload_tsv(request: Request, username: str):
 
 
 def main():
-    uvicorn.run(app, host="192.168.1.100", port=8000)
+    load_dotenv()
+    ssl_key_file = os.getenv("SSL_KEY_FILE_PATH")
+    ssl_cert_file = os.getenv("SSL_CERT_FILE_PATH")
+    print(ssl_key_file, ssl_cert_file)
+    uvicorn.run(app, host="192.168.1.100", port=8000, ssl_keyfile=ssl_key_file, ssl_certfile=ssl_cert_file)
 
 
 if __name__ == "__main__":
