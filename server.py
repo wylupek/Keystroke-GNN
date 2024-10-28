@@ -3,7 +3,8 @@ from fastapi import FastAPI, Request
 import uvicorn
 from io import StringIO
 
-import utils
+from utils import database_utils
+from utils.database_utils import print_tsv
 
 app = FastAPI()
 
@@ -11,27 +12,32 @@ app = FastAPI()
 def read_root():
     return {"message": "Hello, World!"}
 
-@app.post("/upload-csv")
-async def upload_csv(request: Request, username: str):
-    # Read the CSV data from the request body
-    csv_data = await request.body()
-    csv_str = csv_data.decode('utf-8')
-    csv_reader = csv.reader(StringIO(csv_str))
-    next(csv_reader)
+@app.post("/upload-tsv")
+async def upload_tsv(request: Request, username: str):
+    # Read the TSV data from the request body
+    tsv_data = await request.body()
+    tsv_str = tsv_data.decode('utf-8')
+    tsv_reader = csv.reader(StringIO(tsv_str), delimiter='\t')
+    next(tsv_reader) # Skip headers
 
     key_presses = []
-    for row in csv_reader:
-        if len(row) == 3:
+    for row in tsv_reader:
+        if len(row) == 6:
             key_presses.append({
-                "key": row[0],
+                "key": str(row[0]),
                 "press_time": int(row[1]),
-                "duration": int(row[2])
+                "duration": int(row[2]),
+                "accel_x": float(row[3]),
+                "accel_y": float(row[4]),
+                "accel_z": float(row[5]),
             })
+    print(username)
+    database_utils.print_tsv(key_presses)
 
     # Add the username from the query parameter
-    utils.add_csv_values(key_presses, username)
+    database_utils.add_tsv_values(key_presses, username)
 
-    return {"message": "CSV data received successfully"}
+    return {"message": "TSV data received successfully"}
 
 
 def main():
@@ -39,6 +45,7 @@ def main():
 
 
 if __name__ == "__main__":
-    utils.setup_database()
+    database_utils.drop_table()
+    database_utils.setup_database()
     main()
-    utils.drop_table()
+
