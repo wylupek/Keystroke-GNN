@@ -4,7 +4,6 @@ import letter_encoding
 from torch_geometric.data import Data
 from enum import Enum
 from torch.nn.functional import one_hot as Torch_one_hot
-from sklearn.model_selection import train_test_split
 
 KEY_COL = "Key"
 # load data into dataframe
@@ -66,7 +65,7 @@ class load_char_mode(Enum):
     INT = 1,
     ONE_HOT = 2
 
-def create_data_obj(df, edges, mode = load_char_mode.INT):
+def create_data_obj(df, edges, y, mode = load_char_mode.INT):
     edge_index = torch.tensor(edges, dtype=torch.long)
     if mode == load_char_mode.DROP:
         node_attributes = torch.from_numpy(df.drop(columns=[KEY_COL]).values).float()
@@ -81,23 +80,34 @@ def create_data_obj(df, edges, mode = load_char_mode.INT):
         features = torch.from_numpy(df.drop(columns=[KEY_COL]).values)
         node_attributes = torch.cat((features, one_hot_keys), dim=1).float()
 
-    data = Data(x=node_attributes, edge_index=edge_index)
+    data = Data(x=node_attributes, edge_index=edge_index, y=y)
 
     return data
 
 # returns a torch_geometric.data.Data object
-def load_data_object(filepath, mode = load_char_mode.INT, test_split=0.2):
+def load_data_object(filepath, y, mode = load_char_mode.INT, rows_per_example=200):
     unprocessed = pd.read_csv(filepath, sep="\t")
-    train_df, test_df = train_test_split(unprocessed, test_size=test_split, random_state=42)
 
+    df_list = []
+    edges_list = []
+    
+    
+    n_splits = len(unprocessed)//rows_per_example
+    i = 0
+    for _ in range(n_splits-1):
+        d, e = process_df(unprocessed.iloc[i:i+rows_per_example])
+        df_list.append(d)
+        edges_list.append(e)
+        i += rows_per_example
 
-    train_df, train_edges = process_df(train_df)
-    test_df, test_edges = process_df(test_df)
+    # last split
+    d, e = process_df(unprocessed.iloc[i:])
+    df_list.append(d)
+    edges_list.append(e)
 
-    train_data = create_data_obj(train_df, train_edges, mode)
-    test_data = create_data_obj(test_df, test_edges, mode)
+    data_objs = [create_data_obj(df, edges, y=y, mode=mode) for df, edges in zip(df_list, edges_list)]
 
-    return train_data, test_data
+    return data_objs
 
 if __name__ == '__main__':
     import sys
