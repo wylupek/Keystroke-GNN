@@ -33,12 +33,14 @@ class Alphabet(Enum):
     O = next(iota_gen)
     Ó = next(iota_gen)
     P = next(iota_gen)
+    Q = next(iota_gen)
     R = next(iota_gen)
     S = next(iota_gen)
     Ś = next(iota_gen)
     T = next(iota_gen)
     U = next(iota_gen)
     W = next(iota_gen)
+    V = next(iota_gen) 
     Y = next(iota_gen)
     Z = next(iota_gen)
     Ź = next(iota_gen)
@@ -49,7 +51,10 @@ class Alphabet(Enum):
     DOT = next(iota_gen)
     EXCLAMATION_MARK = next(iota_gen)
     SPACE = next(iota_gen)
-
+    QUESTION_MARK = next(iota_gen)
+    NEWLINE = next(iota_gen)
+    HASH = next(iota_gen)
+    STAR = next(iota_gen)
     a = next(iota_gen)
     ą = next(iota_gen)
     b = next(iota_gen)
@@ -72,12 +77,14 @@ class Alphabet(Enum):
     o = next(iota_gen)
     ó = next(iota_gen)
     p = next(iota_gen)
+    q = next(iota_gen)
     r = next(iota_gen)
     s = next(iota_gen)
     ś = next(iota_gen)
     t = next(iota_gen)
     u = next(iota_gen)
     w = next(iota_gen)
+    v = next(iota_gen)
     y = next(iota_gen)
     z = next(iota_gen)
     ź = next(iota_gen)
@@ -112,21 +119,30 @@ def char_to_enum(char):
         'O': Alphabet.O,
         'Ó': Alphabet.Ó,
         'P': Alphabet.P,
+        'Q': Alphabet.Q,
         'R': Alphabet.R,
         'S': Alphabet.S,
         'Ś': Alphabet.Ś,
         'T': Alphabet.T,
         'U': Alphabet.U,
         'W': Alphabet.W,
+        'V': Alphabet.V,
         'Y': Alphabet.Y,
         'Z': Alphabet.Z,
         'Ź': Alphabet.Ź,
         'Ż': Alphabet.Ż,
         'X': Alphabet.X,
         ',': Alphabet.COMMA,
+        '*': Alphabet.STAR,
+        'ST': Alphabet.STAR,
         '.': Alphabet.DOT,
         '!': Alphabet.EXCLAMATION_MARK,
         ' ': Alphabet.SPACE,
+        'SP': Alphabet.SPACE,
+        'NL': Alphabet.NEWLINE,
+        '?': Alphabet.QUESTION_MARK,
+        '#': Alphabet.HASH,
+        'HS': Alphabet.HASH,
         'a': Alphabet.a,
         'ą': Alphabet.ą,
         'b': Alphabet.b,
@@ -148,6 +164,7 @@ def char_to_enum(char):
         'ń': Alphabet.ń,
         'o': Alphabet.o,
         'ó': Alphabet.ó,
+        'q': Alphabet.q,
         'p': Alphabet.p,
         'r': Alphabet.r,
         's': Alphabet.s,
@@ -155,6 +172,7 @@ def char_to_enum(char):
         't': Alphabet.t,
         'u': Alphabet.u,
         'w': Alphabet.w,
+        'v': Alphabet.v,
         'y': Alphabet.y,
         'z': Alphabet.z,
         'ź': Alphabet.ź,
@@ -164,7 +182,7 @@ def char_to_enum(char):
     }
     e = char_map.get(char, None)
     if e is None:
-        raise Exception(f"Unknown char {char}")
+        print(f"Unknown char {char}")
 
     return e
 
