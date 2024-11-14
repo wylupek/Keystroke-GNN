@@ -55,6 +55,33 @@ class Alphabet(Enum):
     NEWLINE = next(iota_gen)
     HASH = next(iota_gen)
     STAR = next(iota_gen)
+    DEL = next(iota_gen)
+    AT = next(iota_gen)
+    COLON = next(iota_gen)
+    SEMICOLON = next(iota_gen)
+    QUOTE = next(iota_gen)
+    DOUBLE_QUOTE = next(iota_gen)
+    LEFT_PAREN = next(iota_gen)
+    RIGHT_PAREN = next(iota_gen)
+    LEFT_BRACKET = next(iota_gen)
+    RIGHT_BRACKET = next(iota_gen)
+    LEFT_BRACE = next(iota_gen)
+    RIGHT_BRACE = next(iota_gen)
+    LESS_THAN = next(iota_gen)
+    GREATER_THAN = next(iota_gen)
+    SLASH = next(iota_gen)
+    BACKSLASH = next(iota_gen)
+    PIPE = next(iota_gen)
+    AMPERSAND = next(iota_gen)
+    PERCENT = next(iota_gen)
+    DOLLAR = next(iota_gen)
+    CARET = next(iota_gen)
+    TILDE = next(iota_gen)
+    UNDERSCORE = next(iota_gen)
+    PLUS = next(iota_gen)
+    MINUS = next(iota_gen)
+    EQUAL = next(iota_gen)
+
     a = next(iota_gen)
     ą = next(iota_gen)
     b = next(iota_gen)
@@ -90,7 +117,16 @@ class Alphabet(Enum):
     ź = next(iota_gen)
     ż = next(iota_gen)
     x = next(iota_gen)
-
+    ZERO = next(iota_gen)
+    ONE = next(iota_gen)
+    TWO = next(iota_gen)
+    THREE = next(iota_gen)
+    FOUR = next(iota_gen)
+    FIVE = next(iota_gen)
+    SIX = next(iota_gen)
+    SEVEN = next(iota_gen)
+    EIGHT = next(iota_gen)
+    NINE = next(iota_gen)
 
     
 AlphabetSize = len(Alphabet)
@@ -143,6 +179,33 @@ def char_to_enum(char):
         '?': Alphabet.QUESTION_MARK,
         '#': Alphabet.HASH,
         'HS': Alphabet.HASH,
+        'DEL': Alphabet.DEL,
+        '@': Alphabet.AT,
+        ':': Alphabet.COLON,
+        ';': Alphabet.SEMICOLON,
+        "'": Alphabet.QUOTE,
+        '"': Alphabet.DOUBLE_QUOTE,
+        '(': Alphabet.LEFT_PAREN,
+        ')': Alphabet.RIGHT_PAREN,
+        '[': Alphabet.LEFT_BRACKET,
+        ']': Alphabet.RIGHT_BRACKET,
+        '{': Alphabet.LEFT_BRACE,
+        '}': Alphabet.RIGHT_BRACE,
+        '<': Alphabet.LESS_THAN,
+        '>': Alphabet.GREATER_THAN,
+        '/': Alphabet.SLASH,
+        '\\': Alphabet.BACKSLASH,
+        '|': Alphabet.PIPE,
+        '&': Alphabet.AMPERSAND,
+        '%': Alphabet.PERCENT,
+        '$': Alphabet.DOLLAR,
+        '^': Alphabet.CARET,
+        '~': Alphabet.TILDE,
+        '_': Alphabet.UNDERSCORE,
+        '+': Alphabet.PLUS,
+        '-': Alphabet.MINUS,
+        '=': Alphabet.EQUAL,
+
         'a': Alphabet.a,
         'ą': Alphabet.ą,
         'b': Alphabet.b,
@@ -177,12 +240,23 @@ def char_to_enum(char):
         'z': Alphabet.z,
         'ź': Alphabet.ź,
         'ż': Alphabet.ż,
-        'x': Alphabet.x
+        'x': Alphabet.x,
+        '0': Alphabet.ZERO,
+        '1': Alphabet.ONE,
+        '2': Alphabet.TWO,
+        '3': Alphabet.THREE,
+        '4': Alphabet.FOUR,
+        '5': Alphabet.FIVE,
+        '6': Alphabet.SIX,
+        '7': Alphabet.SEVEN,
+        '8': Alphabet.EIGHT,
+        '9': Alphabet.NINE
 
     }
     e = char_map.get(char, None)
     if e is None:
         print(f"Unknown char {char}")
+        print(f"Len char {len(char)}")
 
     return e
 

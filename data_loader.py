@@ -4,6 +4,7 @@ import letter_encoding
 from torch_geometric.data import Data
 from enum import Enum
 from torch.nn.functional import one_hot as Torch_one_hot
+import csv
 
 KEY_COL = "Key"
 # load data into dataframe
@@ -43,7 +44,7 @@ def process_df(df):
     avg_duration_before = { k:(t[0]/t[1]) if t[1] != 0 else 0 for (k,t) in avg_duration_before.items() }
     avg_duration_after =  { k:(t[0]/t[1]) if t[1] != 0 else 0 for (k,t) in avg_duration_after.items()  }
 
-    df = df[[KEY_COL, "accel_x","accel_y","accel_z"]].groupby(KEY_COL).mean().reset_index()
+    df = df[[KEY_COL, "AccelX","AccelY","AccelZ"]].groupby(KEY_COL).mean().reset_index()
     df["duration_before"] = df[KEY_COL].apply(lambda x: avg_duration_before.get(x))
     df["duration_after"] = df[KEY_COL].apply(lambda x: avg_duration_after.get(x))
     
@@ -86,7 +87,7 @@ def create_data_obj(df, edges, y, mode = load_char_mode.INT):
 
 # returns a torch_geometric.data.Data object
 def load_data_object(filepath, y, mode = load_char_mode.INT, rows_per_example=200):
-    unprocessed = pd.read_csv(filepath, sep="\t")
+    unprocessed = pd.read_csv(filepath, sep="\t", encoding='utf-8', quoting=csv.QUOTE_NONE)
 
     df_list = []
     edges_list = []
