@@ -52,7 +52,7 @@ test_train_split = 0.2 # 20% into test
 NUM_HIDDEN_DIMS = 64
 NUM_EPOCHS = 700
 
-file_names = ["../key_presses (1).tsv", "../key_presses (2).tsv", "../key_presses (3).tsv", "../key_presses (4).tsv"]
+file_names = ["datasets/key_presses (1).tsv", "datasets/key_presses (2).tsv", "datasets/key_presses (3).tsv", "datasets/key_presses (4).tsv"]
 
 
 # stuff we want to change
@@ -118,7 +118,7 @@ for rows_per_example in rows_per_example_options:
 
 
             # Training over epochs
-            data_loader = torchLoader.DataLoader(dataset, batch_size=16, shuffle=True)
+            data_loader = torchLoader.DataLoader(dataset, batch_size=32, shuffle=True)
             prev_loss = 100000
             for epoch in range(1, NUM_EPOCHS):
                 loss = train(model, data_loader)
@@ -153,7 +153,7 @@ for rows_per_example in rows_per_example_options:
                 (rows_per_example, mode, positive_index, acc)
             )
             with open("zz.txt", "a") as f:
-                f.writelines([(rows_per_example, mode, positive_index, acc)])
+                f.writelines([", ".join((rows_per_example, mode, positive_index, acc))])
             
 
 df = pd.DataFrame(df_body, columns=["rows_per_example", "mode", "pos_index", "acc"])
