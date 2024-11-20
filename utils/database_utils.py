@@ -1,4 +1,14 @@
 import sqlite3
+import os
+import glob
+import csv
+from io import StringIO
+
+
+def print_tsv(content: list[dict]) -> None:
+    print("key\tpress_time\tduration\taccel_x\taccel_y\taccel_z")
+    for row in content:
+        print(f"{row['key']}\t{row['press_time']}\t{row['duration']}\t{row['accel_x']}\t{row['accel_y']}\t{row['accel_z']}")
 
 
 def drop_table() -> bool:
@@ -28,9 +38,9 @@ def drop_table() -> bool:
         return False
 
 
-def setup_database() -> bool:
+def create_table() -> bool:
     """
-    Create the keystroke_data.sqlite database and the key_press table if they do not exist.
+    Create key_press table if they do not exist.
 
     Returns:
         bool: True if the table was created successfully or already exists, False if there was an error.
@@ -58,11 +68,11 @@ def setup_database() -> bool:
         ''')
         conn.commit()
         conn.close()
-        print("Database setup complete.")
+        print("Creating table complete.")
         return True
     except sqlite3.Error as e:
         conn.close()
-        print(f"An error occurred while setting up the database: {e}")
+        print(f"An error occurred while creating up the table: {e}")
         return False
 
 
@@ -116,7 +126,128 @@ def add_tsv_values(content: list[dict], user_id: str) -> bool:
         return False
 
 
-def print_tsv(content: list[dict]) -> None:
-    print("key\tpress_time\tduration\taccel_x\taccel_y\taccel_z")
-    for row in content:
-        print(f"{row['key']}\t{row['press_time']}\t{row['duration']}\t{row['accel_x']}\t{row['accel_y']}\t{row['accel_z']}")
+def load_file(file_name: str) -> bool:
+    """
+    Load a single .tsv file and insert its data into the database, ensuring the header row is skipped.
+
+    Args:
+        file_name (str): The path to the .tsv file.
+
+    Returns:
+        bool: True if the file was processed successfully, False otherwise.
+    """
+    try:
+        base_name = os.path.basename(file_name)
+        user_id = os.path.splitext(base_name)[0]
+
+        with open(file_name, 'r', newline='', encoding='utf-8') as file:
+            reader = csv.reader(file, delimiter='\t')
+
+            next(reader, None)
+
+            # Convert data rows to list of dictionaries
+            key_presses = []
+            for row in reader:
+                if len(row) == 6:
+                    key_presses.append({
+                        "key": str(row[0]),
+                        "press_time": str(row[1]),
+                        "duration": str(row[2]),
+                        "accel_x": str(row[3]),
+                        "accel_y": str(row[4]),
+                        "accel_z": str(row[5]),
+                    })
+
+            # Insert data into the database
+            if not add_tsv_values(key_presses, user_id):
+                print(f"Failed to add data from file {file_name}.")
+                return False
+
+        print(f"File {file_name} processed successfully.")
+        return True
+
+    except Exception as e:
+        print(f"An error occurred while processing file {file_name}: {e}")
+        return False
+
+
+def load_dir(dir_name: str) -> bool:
+    """
+    Load all .tsv files from the specified directory and insert their data into the database,
+    ensuring that the header row is skipped.
+
+    Args:
+        dir_name (str): The path to the directory containing .tsv files.
+
+    Returns:
+        bool: True if all files were processed successfully, False otherwise.
+    """
+    try:
+        tsv_files = glob.glob(os.path.join(dir_name, '*.tsv'))
+        if not tsv_files:
+            print(f"No .tsv files found in directory '{dir_name}'.")
+            return False
+
+        for tsv_file in tsv_files:
+            print(f"Processing file: {tsv_file}")
+            if not load_file(tsv_file):
+                print(f"Failed to process file {tsv_file}.")
+                return False
+
+        print("All files have been processed successfully.")
+        return True
+
+    except Exception as e:
+        print(f"An error occurred while loading files from directory '{dir_name}': {e}")
+        return False
+
+
+def load_str(content: str, username: str, skip_header: bool = True) -> bool:
+    """
+    Process TSV content from a string, optionally skip the header row,
+    and insert the data into the database.
+
+    Args:
+        content (str): The TSV data as a string.
+        username (str): The username associated with the data.
+        skip_header (bool): Whether to skip the first row (header) of the input content.
+
+    Returns:
+        bool: True if the content was processed successfully, False otherwise.
+    """
+    try:
+        # Create a CSV reader from the string content
+        tsv_reader = csv.reader(StringIO(content), delimiter='\t')
+
+        if skip_header:
+            next(tsv_reader, None)
+
+        # Convert data rows to a list of dictionaries
+        key_presses = []
+        for row in tsv_reader:
+            if len(row) == 6:
+                key_presses.append({
+                    "key": str(row[0]),
+                    "press_time": str(row[1]),
+                    "duration": str(row[2]),
+                    "accel_x": str(row[3]),
+                    "accel_y": str(row[4]),
+                    "accel_z": str(row[5]),
+                })
+
+        # Insert data into the database
+        if not add_tsv_values(key_presses, username):
+            print(f"Failed to add data for username {username}.")
+            return False
+
+        print(f"Content processed successfully for username {username}.")
+        return True
+
+    except Exception as e:
+        print(f"An error occurred while processing content for username {username}: {e}")
+        return False
+
+if __name__ == '__main__':
+    drop_table()
+    create_table()
+    load_dir("datasets")
