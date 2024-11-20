@@ -1,7 +1,7 @@
 import torch
 import pandas as pd
 
-import letter_encoding
+from utils import letter_encoding
 from torch_geometric.data import Data
 from enum import Enum
 from torch.nn.functional import one_hot as Torch_one_hot

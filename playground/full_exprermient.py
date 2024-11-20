@@ -1,12 +1,11 @@
 import torch
-from torch_geometric.data import Data
 import torch_geometric.nn as pyg_nn
 import torch.nn.functional as F
-from torch_geometric.data import InMemoryDataset, Data
+from torch_geometric.data import InMemoryDataset
 from sklearn.model_selection import train_test_split
 import torch_geometric.loader as torchLoader
 
-import data_loader as dl
+from utils import data_loader as dl
 import pandas as pd
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
