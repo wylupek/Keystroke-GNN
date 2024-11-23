@@ -5,7 +5,6 @@ from torch_geometric.data import InMemoryDataset
 from sklearn.model_selection import train_test_split
 import torch_geometric.loader as torchLoader
 
-# import utils.data_loader as dl
 import pandas as pd
 from collections import Counter
 from utils.data_loader import load_from_db, LoadMode
@@ -53,40 +52,56 @@ class SimpleGraphDataset(InMemoryDataset):
                            class_counts.items()]) + f" | Total: {sum(class_counts.values())}"
 
 
-def train(database_path: str, user_id: str, mode: LoadMode):
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+def train(database_path: str, user_id: str, model_path='', mode=LoadMode.DROP,
+          test_train_split=0.2, hidden_dim=64, epochs_num=1000,
+          rows_per_example=150, positive_negative_ratio=0.5) -> float:
+    """
+    Train and save the model
+    :param database_path: Path to database with key presses
+    :param user_id: user_id for positive labels
+    :param model_path: Path to save the model. Leave default to save at ./model/<user_id>.pth
+    :param mode: Mode for processing node attributes
+    :param test_train_split: test to all examples proportion, set 0 for training only
+    :param hidden_dim: hidden dimension
+    :param epochs_num: number of epochs for training loop
+    :param rows_per_example: number of key presses per example
+    :param positive_negative_ratio: positive to negative class ratio, set 0 to load all examples,
+        but take care of class imbalance.
+    :return: accuracy of the model
+    """
+    if model_path == '':
+        model_path = f'models/{user_id}.pth'
 
-    test_train_split = 0.2  # 20% into test
-    NUM_HIDDEN_DIMS = 64
-    NUM_EPOCHS = 1000
-    rows_per_example = 150
+    device = str(torch.device('cuda' if torch.cuda.is_available() else 'cpu'))
 
-    examples = load_from_db(database_path=database_path, user_id=user_id, positive_negative_ratio=0,
-                               mode=mode, rows_per_example=rows_per_example)
+    examples = load_from_db(
+        database_path=database_path, user_id=user_id, positive_negative_ratio=positive_negative_ratio,
+        mode=mode, rows_per_example=rows_per_example
+    )
 
-    train_pos, test_pos = train_test_split([ex for ex in examples if ex['y'] == 1],
-                                   test_size=test_train_split)
-    train_neg, test_neg = train_test_split([ex for ex in examples if ex['y'] == 0],
-                                           test_size=test_train_split)
-    train_examples = train_pos + train_neg
-    test_examples = test_pos + test_neg
+    if test_train_split > 0.0:
+        train_examples, test_examples = train_test_split(
+            examples, test_size=test_train_split, stratify=[ex['y'] for ex in examples]
+        )
+        train_examples = SimpleGraphDataset([e.to(device) for e in train_examples])
+        test_examples = SimpleGraphDataset([e.to(device) for e in test_examples])
+        print("Train dataset statistics: ", train_examples.statistics())
+        print("Test dataset statistics:  ", test_examples.statistics())
+    else:
+        train_examples = examples
+        test_examples = []
+        train_examples = SimpleGraphDataset([e.to(device) for e in train_examples])
+        print("Train dataset statistics: ", train_examples.statistics())
 
-    del examples, train_pos, train_neg, test_pos, test_neg
 
-    train_examples = SimpleGraphDataset([e.to(device) for e in train_examples])
-    test_examples = SimpleGraphDataset([e.to(device) for e in test_examples])
-
-    # print("Train dataset statistics: ", train_examples.statistics())
-    # print("Test dataset statistics:  ", test_examples.statistics())
-
-    model = LetterGNN(num_node_features=train_examples.num_node_features, hidden_dim=NUM_HIDDEN_DIMS,
+    model = LetterGNN(num_node_features=train_examples.num_node_features, hidden_dim=hidden_dim,
                       num_classes=train_examples.num_classes).to(device)
     optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
     criterion = torch.nn.CrossEntropyLoss()
 
-    # # Training over epochs
+    # Training over epochs
     data_loader = torchLoader.DataLoader(train_examples, batch_size=32, shuffle=True)
-    for epoch in range(1, NUM_EPOCHS):
+    for epoch in range(1, epochs_num):
         model.train()
         total_loss = 0
         for data in data_loader:
@@ -97,29 +112,31 @@ def train(database_path: str, user_id: str, mode: LoadMode):
             optimizer.step()  # Update the model parameters
             total_loss += loss.item()
         loss = total_loss / len(data_loader)
-        if epoch % 50 == 0 or epoch == NUM_EPOCHS - 1:
+        if epoch % 50 == 0 or epoch == epochs_num - 1:
             print(f"Epoch: {epoch:03d}, Loss: {loss:.4f}")
         if round(loss, 3) == 0:
             print(f"Epoch: {epoch:03d}, Loss: {loss:.4f}")
             break
 
+    torch.save(model.state_dict(), model_path)
 
-    test_loader = torchLoader.DataLoader(test_examples, batch_size=1, shuffle=False)
-
-    model.eval()
-    correct = 0
-    for data in test_loader:
-        output = model(data.x, data.edge_index, data.batch)
-        pred = output.argmax(dim=1)  # Get the index of the max log-probability
-        # print(f"Correct {data.y[0]} Pred {pred[0]}")
-        if pred != data.y:
-            print(output[0])
-        correct += (pred == data.y).sum().item()
-    accuracy = correct / len(test_loader.dataset)
-    print(f"Test Accuracy: {accuracy:.4f}")
-
+    if len(test_examples):
+        test_loader = torchLoader.DataLoader(test_examples, batch_size=1, shuffle=False)
+        model.eval()
+        correct = 0
+        for data in test_loader:
+            output = model(data.x, data.edge_index, data.batch)
+            pred = output.argmax(dim=1)  # Get the index of the max log-probability
+            # print(f"Correct {data.y[0]} Pred {pred[0]}")
+            # if pred != data.y:
+            #     print(output[0])
+            correct += (pred == data.y).sum().item()
+        accuracy = correct / len(test_loader.dataset)
+        print(f"Test Accuracy: {accuracy:.4f}")
+        return accuracy
+    return 0.0
 
 
 if __name__ == '__main__':
-    train("../keystroke_data.sqlite", "user1", LoadMode.DROP)
-    # train()
+    train("../keystroke_data.sqlite", "user4",
+          model_path='../models/test.pth', test_train_split=0.2, positive_negative_ratio=1)

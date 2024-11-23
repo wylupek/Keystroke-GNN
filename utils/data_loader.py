@@ -225,7 +225,7 @@ def get_negative_examples(conn: sqlite3.Connection, user_id: str, num_examples: 
     df_list = []
     edges_list = []
     total_starting_indices = len(starting_indices)
-    if num_examples >= total_starting_indices:
+    if num_examples >= total_starting_indices or num_examples == 0:
         if num_examples > total_starting_indices:
             print(f"Warning: expected {num_examples} examples, but got {total_starting_indices}")
         for starting_index in starting_indices:
@@ -244,13 +244,14 @@ def get_negative_examples(conn: sqlite3.Connection, user_id: str, num_examples: 
     return data_objs
 
 
-def load_from_db(user_id: str, positive_negative_ratio: float,
+def load_from_db(database_path: str, user_id: str, positive_negative_ratio: float,
                  mode=LoadMode.INT, rows_per_example=200) -> List[Data]:
     """
     Loads and processes data from a database to generate a list of PyTorch Geometric `Data` objects.
+    :param database_path: Path to database
     :param user_id: user_id of positive examples
     :param mode: Mode for processing node attributes
-    :param rows_per_example: Number of rows to include in one example
+    :param rows_per_example: Number of rows to include in one example. Set to 0 to load all examples
     :param positive_negative_ratio: Positive to negative examples ratio
     :return: List[torch_geometric.data.Data]:
         A list of `Data` objects, where each object represents a processed examples containing:
@@ -260,16 +261,20 @@ def load_from_db(user_id: str, positive_negative_ratio: float,
     """
 
     try:
-        conn = sqlite3.connect('keystroke_data.sqlite')
+        conn = sqlite3.connect(database_path)
     except sqlite3.Error as e:
         print(f"An error occurred while connecting to the database: {e}")
         return []
 
-
     positive_examples = get_positive_examples(conn, user_id, rows_per_example, mode)
-    negative_examples = (get_negative_examples(conn, user_id,
-                                               int(len(positive_examples) / positive_negative_ratio),
-                                               rows_per_example, mode))
+
+    if positive_negative_ratio == 0:
+        negative_examples = (get_negative_examples(conn, user_id, 0,
+                                                   rows_per_example, mode))
+    else:
+        negative_examples = (get_negative_examples(conn, user_id,
+                                                   int(len(positive_examples) / positive_negative_ratio),
+                                                   rows_per_example, mode))
     return positive_examples + negative_examples
 
 
