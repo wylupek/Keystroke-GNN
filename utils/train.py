@@ -5,10 +5,13 @@ from torch_geometric.data import InMemoryDataset
 from sklearn.model_selection import train_test_split
 import torch_geometric.loader as torchLoader
 
-from utils import data_loader as dl
+# import utils.data_loader as dl
 import pandas as pd
+from collections import Counter
+from utils.data_loader import load_from_db, LoadMode
 
 
+# Define a simple GCN model
 class LetterGNN(torch.nn.Module):
     def __init__(self, num_node_features, hidden_dim, num_classes, num_layers=2):
         super(LetterGNN, self).__init__()
@@ -44,55 +47,45 @@ class SimpleGraphDataset(InMemoryDataset):
     def __len__(self):
         return len(self.data.y)  # Number of graphs in the dataset
 
+    def statistics(self) -> str:
+        class_counts = Counter(self.data.y.cpu().numpy())
+        return " | ".join([f"{item_class}: {count}" for item_class, count in
+                           class_counts.items()]) + f" | Total: {sum(class_counts.values())}"
 
 
-
-def train():
+def train(database_path: str, user_id: str, mode: LoadMode):
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
     test_train_split = 0.2  # 20% into test
     NUM_HIDDEN_DIMS = 64
-    NUM_EPOCHS = 700
-    file_names = ["../datasets/key_presses (1).tsv", "../datasets/key_presses (3).tsv", "../datasets/key_presses (4).tsv"]
-    file_name = "../datasets/key_presses (2).tsv"
-    positive_index = 2
+    NUM_EPOCHS = 1000
+    rows_per_example = 150
 
-    df_body = []
+    examples = load_from_db(database_path=database_path, user_id=user_id, positive_negative_ratio=0,
+                               mode=mode, rows_per_example=rows_per_example)
 
-    # stuff we want to change
-    mode = dl.load_char_mode.DROP
-    rows_per_example = 30
+    train_pos, test_pos = train_test_split([ex for ex in examples if ex['y'] == 1],
+                                   test_size=test_train_split)
+    train_neg, test_neg = train_test_split([ex for ex in examples if ex['y'] == 0],
+                                           test_size=test_train_split)
+    train_examples = train_pos + train_neg
+    test_examples = test_pos + test_neg
 
-    negative_datasets = [
-        dl.load_data_object(filename, mode=mode, y=torch.tensor(0), rows_per_example=rows_per_example)
-        for filename in file_names]
-    negative_datasets.append(dl.load_data_object(file_name, mode=mode, y=torch.tensor(1), rows_per_example=rows_per_example))
-    # positive_dataset = (dl.load_data_object(file_name, mode=mode, y=torch.tensor(1), rows_per_example=rows_per_example))
+    del examples, train_pos, train_neg, test_pos, test_neg
 
+    train_examples = SimpleGraphDataset([e.to(device) for e in train_examples])
+    test_examples = SimpleGraphDataset([e.to(device) for e in test_examples])
 
+    # print("Train dataset statistics: ", train_examples.statistics())
+    # print("Test dataset statistics:  ", test_examples.statistics())
 
-
-
-    training_dataset = []
-    testing_dataset = []
-
-    for negative_dataset in negative_datasets:
-        train, test = train_test_split(negative_dataset, test_size=test_train_split)
-        training_dataset.extend(train)
-        testing_dataset.extend(test)
-    # training_dataset_pos, testing_dataset_pos = train_test_split(positive_dataset, test_size=test_train_split)
-
-    dataset = SimpleGraphDataset([e.to(device) for e in training_dataset])
-    test_dataset = SimpleGraphDataset([e.to(device) for e in testing_dataset])
-
-    model = LetterGNN(num_node_features=dataset.num_node_features, hidden_dim=NUM_HIDDEN_DIMS,
-                      num_classes=dataset.num_classes).to(device)
+    model = LetterGNN(num_node_features=train_examples.num_node_features, hidden_dim=NUM_HIDDEN_DIMS,
+                      num_classes=train_examples.num_classes).to(device)
     optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
     criterion = torch.nn.CrossEntropyLoss()
 
-    # Training over epochs
-    data_loader = torchLoader.DataLoader(dataset, batch_size=32, shuffle=True)
-    prev_loss = 100000
+    # # Training over epochs
+    data_loader = torchLoader.DataLoader(train_examples, batch_size=32, shuffle=True)
     for epoch in range(1, NUM_EPOCHS):
         model.train()
         total_loss = 0
@@ -111,7 +104,7 @@ def train():
             break
 
 
-    test_loader = torchLoader.DataLoader(test_dataset, batch_size=1, shuffle=False)
+    test_loader = torchLoader.DataLoader(test_examples, batch_size=1, shuffle=False)
 
     model.eval()
     correct = 0
@@ -126,5 +119,7 @@ def train():
     print(f"Test Accuracy: {accuracy:.4f}")
 
 
+
 if __name__ == '__main__':
-    train()
+    train("../keystroke_data.sqlite", "user1", LoadMode.DROP)
+    # train()
