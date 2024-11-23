@@ -1,4 +1,4 @@
-Key	PressTime	Duration	AccelX	AccelY	AccelZ
+key	press_time	duration	accel_x	accel_y	accel_z
 d	1731438074679	0	-1.09395	6.8110504	7.557
 z	1731438074930	0	-0.78195006	6.57105	7.557
 i	1731438074932	253	-0.78195006	6.57105	7.557

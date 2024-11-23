@@ -3,6 +3,8 @@ import os
 import glob
 import csv
 from io import StringIO
+from datetime import datetime
+
 
 
 def print_tsv(content: list[dict]) -> None:
@@ -11,12 +13,16 @@ def print_tsv(content: list[dict]) -> None:
         print(f"{row['key']}\t{row['press_time']}\t{row['duration']}\t{row['accel_x']}\t{row['accel_y']}\t{row['accel_z']}")
 
 
+def save_tsv(content: str, username: str):
+    path = './datasets/' + username + '.tsv'
+    with open(path, "w") as file:
+        file.write(content)
+
+
 def drop_table() -> bool:
     """
     Drop the key_press table if it exists.
-
-    Returns:
-        bool: True if the table was dropped successfully, False otherwise.
+    :return: True if the table was dropped successfully, False otherwise.
     """
 
     try:
@@ -41,9 +47,7 @@ def drop_table() -> bool:
 def create_table() -> bool:
     """
     Create key_press table if they do not exist.
-
-    Returns:
-        bool: True if the table was created successfully or already exists, False if there was an error.
+    :return: True if the table was created successfully or already exists, False if there was an error.
     """
 
     try:
@@ -79,17 +83,11 @@ def create_table() -> bool:
 def add_tsv_values(content: list[dict], user_id: str) -> bool:
     """
     Insert records into the key_press table in the keystroke_data.sqlite database.
-
-    Args:
-        content (list[dict]): A list of dictionaries containing key press data,
-                              where each dictionary must contain the keys
-                              'key', 'press_time', 'duration',
-                              'accel_x', 'accel_y', 'accel_z'.
-        user_id (str): The ID of the user associated with the key presses.
-
-    Returns:
-        bool: True if the records were inserted successfully,
-              False if there was an error during the process.
+    :param content: A list of dictionaries containing key press data, where each
+        dictionary must contain the keys 'key', 'press_time', 'duration', 'accel_x', 'accel_y', 'accel_z'.
+    :param user_id: user_id of the user associated with the key presses.
+    :return: True if the records were inserted successfully,
+             False if there was an error during the process.
     """
 
     try:
@@ -102,10 +100,11 @@ def add_tsv_values(content: list[dict], user_id: str) -> bool:
         cursor = conn.cursor()
 
         # Prepare and execute the insert statements
+        current_datetime = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         for entry in content:
             cursor.execute('''
                 INSERT INTO key_press (user_id, key, press_time, duration, accel_x, accel_y, accel_z, date)
-                VALUES (?, ?, ?, ?, ?, ?, ?, DATE('now'))
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             ''', (
                 user_id,
                 entry["key"],
@@ -113,7 +112,8 @@ def add_tsv_values(content: list[dict], user_id: str) -> bool:
                 entry["duration"],
                 entry["accel_x"],
                 entry["accel_y"],
-                entry["accel_z"]
+                entry["accel_z"],
+                current_datetime
             ))
 
         conn.commit()
@@ -129,20 +129,15 @@ def add_tsv_values(content: list[dict], user_id: str) -> bool:
 def load_file(file_name: str) -> bool:
     """
     Load a single .tsv file and insert its data into the database, ensuring the header row is skipped.
-
-    Args:
-        file_name (str): The path to the .tsv file.
-
-    Returns:
-        bool: True if the file was processed successfully, False otherwise.
+    :param file_name: The path to the .tsv file.
+    :returns: True if the file was processed successfully, False otherwise.
     """
     try:
         base_name = os.path.basename(file_name)
         user_id = os.path.splitext(base_name)[0]
 
         with open(file_name, 'r', newline='', encoding='utf-8') as file:
-            reader = csv.reader(file, delimiter='\t')
-
+            reader = csv.reader(file, delimiter='\t', quotechar=None)
             next(reader, None)
 
             # Convert data rows to list of dictionaries
@@ -175,12 +170,8 @@ def load_dir(dir_name: str) -> bool:
     """
     Load all .tsv files from the specified directory and insert their data into the database,
     ensuring that the header row is skipped.
-
-    Args:
-        dir_name (str): The path to the directory containing .tsv files.
-
-    Returns:
-        bool: True if all files were processed successfully, False otherwise.
+    :param dir_name: The path to the directory containing .tsv files.
+    :return: True if all files were processed successfully, False otherwise.
     """
     try:
         tsv_files = glob.glob(os.path.join(dir_name, '*.tsv'))
@@ -206,14 +197,10 @@ def load_str(content: str, username: str, skip_header: bool = True) -> bool:
     """
     Process TSV content from a string, optionally skip the header row,
     and insert the data into the database.
-
-    Args:
-        content (str): The TSV data as a string.
-        username (str): The username associated with the data.
-        skip_header (bool): Whether to skip the first row (header) of the input content.
-
-    Returns:
-        bool: True if the content was processed successfully, False otherwise.
+    :param content: The TSV data as a string.
+    :param username: The username associated with the data.
+    :param skip_header: Whether to skip the first row (header) of the input content.
+    :return: True if the content was processed successfully, False otherwise.
     """
     try:
         # Create a CSV reader from the string content
@@ -246,6 +233,7 @@ def load_str(content: str, username: str, skip_header: bool = True) -> bool:
     except Exception as e:
         print(f"An error occurred while processing content for username {username}: {e}")
         return False
+
 
 if __name__ == '__main__':
     drop_table()

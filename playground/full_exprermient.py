@@ -51,18 +51,18 @@ test_train_split = 0.2 # 20% into test
 NUM_HIDDEN_DIMS = 64
 NUM_EPOCHS = 700
 
-file_names = ["datasets/key_presses (1).tsv", "datasets/key_presses (2).tsv", "datasets/key_presses (3).tsv", "datasets/key_presses (4).tsv"]
+file_names = ["datasets/user1.tsv", "datasets/user2.tsv", "datasets/user4.tsv", "datasets/user3.tsv"]
 
 
 # stuff we want to change
-modes = [dl.load_char_mode.DROP, dl.load_char_mode.ONE_HOT, dl.load_char_mode.INT]
+modes = [dl.LoadMode.DROP, dl.LoadMode.ONE_HOT, dl.LoadMode.INT]
 rows_per_example_options = [5, 7, 10, 15, 20, 25, 30, 35]
 
 for rows_per_example in rows_per_example_options:
     for mode in modes:
         # this is a list of list of Data objects - datasets
         # each dataset comes from a different input file - a different user
-        list_of_datasets = [dl.load_data_object(filename, mode=mode, y=torch.tensor([i]), rows_per_example=rows_per_example)
+        list_of_datasets = [dl.load_from_file(filename, mode=mode, y=torch.tensor([i]), rows_per_example=rows_per_example)
                             for i, filename in enumerate(file_names)]
 
         num_features = list_of_datasets[0][0].x.shape[1]

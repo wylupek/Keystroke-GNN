@@ -17,6 +17,7 @@ async def upload_tsv(request: Request, username: str):
     tsv_data = await request.body()
     tsv_str = tsv_data.decode('utf-8')
     database_utils.load_str(tsv_str, username, skip_header=True)
+    # database_utils.save_tsv(tsv_str, username)
     return {"message": "TSV data received successfully"}
 
 
@@ -31,5 +32,6 @@ def main():
 if __name__ == "__main__":
     database_utils.drop_table()
     database_utils.create_table()
+    database_utils.load_dir("datasets")
     main()
 
