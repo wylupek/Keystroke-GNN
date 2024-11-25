@@ -4,7 +4,7 @@ import glob
 import csv
 from io import StringIO
 from datetime import datetime
-
+import time
 
 
 def print_tsv(content: list[dict]) -> None:
@@ -14,9 +14,21 @@ def print_tsv(content: list[dict]) -> None:
 
 
 def save_tsv(content: str, username: str):
-    path = './datasets/' + username + '.tsv'
-    with open(path, "w") as file:
+    base_path = './datasets/'
+    base_filename = username + '.tsv'
+    file_path = os.path.join(base_path, base_filename)
+
+    # Check if the file already exists
+    if os.path.exists(file_path):
+        counter = 1
+        while os.path.exists(os.path.join(base_path, f"{username}.{counter}.tsv")):
+            counter += 1
+        file_path = os.path.join(base_path, f"{username}.{counter}.tsv")
+
+    # Save the file
+    with open(file_path, "w") as file:
         file.write(content)
+    print(f"File saved as: {file_path}")
 
 
 def drop_table() -> bool:
@@ -134,7 +146,7 @@ def load_file(file_name: str) -> bool:
     """
     try:
         base_name = os.path.basename(file_name)
-        user_id = os.path.splitext(base_name)[0]
+        user_id = os.path.splitext(base_name)[0].split('.')[0]
 
         with open(file_name, 'r', newline='', encoding='utf-8') as file:
             reader = csv.reader(file, delimiter='\t', quotechar=None)
@@ -184,6 +196,7 @@ def load_dir(dir_name: str) -> bool:
             if not load_file(tsv_file):
                 print(f"Failed to process file {tsv_file}.")
                 return False
+            time.sleep(1)
 
         print("All files have been processed successfully.")
         return True
@@ -238,4 +251,4 @@ def load_str(content: str, username: str, skip_header: bool = True) -> bool:
 if __name__ == '__main__':
     drop_table()
     create_table()
-    load_dir("datasets")
+    load_dir("datasets/training")
