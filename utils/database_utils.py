@@ -178,6 +178,7 @@ def load_file(file_name: str) -> bool:
         return False
 
 
+# TODO Test it with the same username in multiple files
 def load_dir(dir_name: str) -> bool:
     """
     Load all .tsv files from the specified directory and insert their data into the database,
