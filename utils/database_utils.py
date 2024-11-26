@@ -218,7 +218,7 @@ def load_str(content: str, username: str, skip_header: bool = True) -> bool:
     """
     try:
         # Create a CSV reader from the string content
-        tsv_reader = csv.reader(StringIO(content), delimiter='\t')
+        tsv_reader = csv.reader(StringIO(content), delimiter='\t', quotechar=None)
 
         if skip_header:
             next(tsv_reader, None)

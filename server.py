@@ -6,7 +6,7 @@ from utils import database_utils
 from dotenv import load_dotenv
 
 from utils.inference import inference as inference_fun
-from utils.train import train as train_fun
+from utils.train import train as train_fun, LoadMode
 
 app = FastAPI()
 
@@ -33,7 +33,7 @@ async def train(request: Request, username: str):
     database_utils.save_tsv(tsv_str, "training/" + username)
 
     train_fun('keystroke_data.sqlite', username,
-              rows_per_example=100, test_train_split=0, positive_negative_ratio=0)
+              rows_per_example=50, test_train_split=0, positive_negative_ratio=1, mode=LoadMode.ONE_HOT, hidden_dim=128)
     return {"message": "TSV data received successfully"}
 
 

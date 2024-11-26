@@ -117,7 +117,9 @@ def train(database_path: str, user_id: str, model_path='', mode=LoadMode.DROP,
         print("Train dataset statistics: ", train_examples.statistics())
         print("Test dataset statistics:  ", test_examples.statistics())
     else:
-        train_examples = examples_pos + examples_neg
+        train_examples = examples_pos # + examples_neg
+        for example in examples_neg_list:
+            train_examples.extend(example)
         test_examples = []
         train_examples = SimpleGraphDataset([e.to(device) for e in train_examples])
         print("Train dataset statistics: ", train_examples.statistics())

@@ -10,6 +10,7 @@ import random
 from enum import Enum
 from typing import Tuple, List
 import math
+from io import StringIO
 
 
 class LoadMode(Enum):
@@ -149,6 +150,45 @@ def load_from_file(filepath: str, y: torch.tensor, mode=LoadMode.INT, rows_per_e
     return data_objs
 
 
+def load_from_str(content: str, y: torch.tensor, mode=LoadMode.DROP, rows_per_example=200, offset=200) -> List[Data]:
+    """
+    Loads and processes data from a string to generate a list of PyTorch Geometric `Data` objects.
+    :param content: str: string with .tsv content
+            | key - Key identifying each event.
+            | duration - Duration values for each event.
+            | accel_x, accel_y, accel_z - Accelerometer data.
+    :param y: data label
+    :param mode: Mode for processing node attributes
+    :param rows_per_example: Number of rows to include in one example
+    :param offset: Number of rows between beginning of each example
+    :return: List[torch_geometric.data.Data]:
+        A list of `Data` objects, where each object represents a processed example
+        containing:
+            - `x`: Node attributes as a tensor
+            - `edge_index`: Edge indices tensor of shape [2, num_edges].
+            - `y`: Data owner label
+    """
+    unprocessed = pd.read_csv(StringIO(content), sep="\t", encoding='utf-8', quoting=csv.QUOTE_NONE)
+
+    df_list = []
+    edges_list = []
+
+    i = 0
+    while i+rows_per_example < len(unprocessed):
+        d, e = process_df(unprocessed.iloc[i:i+rows_per_example])
+        df_list.append(d)
+        edges_list.append(e)
+        i += offset
+
+    # Last split
+    d, e = process_df(unprocessed.iloc[i:])
+    df_list.append(d)
+    edges_list.append(e)
+
+    data_objs = [create_data_obj(df, edges, y=y, mode=mode) for df, edges in zip(df_list, edges_list)]
+    return data_objs
+
+
 def get_user_examples(conn: sqlite3.Connection, user_id: str,
                           rows_per_example=200, mode=LoadMode.DROP, label:int=1) -> List[Data]:
     """
@@ -164,6 +204,7 @@ def get_user_examples(conn: sqlite3.Connection, user_id: str,
             - `edge_index`: Edge indices tensor of shape [2, num_edges].
             - `y`: tensor(1)
     """
+    # TODO add checking date (timestamp)
     cursor = conn.cursor()
     cursor.execute("""
         SELECT * FROM key_press
