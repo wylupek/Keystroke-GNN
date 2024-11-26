@@ -5,8 +5,12 @@ from torch_geometric.data import InMemoryDataset
 from sklearn.model_selection import train_test_split
 import torch_geometric.loader as torchLoader
 
-from utils import data_loader as dl
 import pandas as pd
+
+import sys
+import os
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+import utils.data_loader as dl
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
@@ -47,16 +51,16 @@ class SimpleGraphDataset(InMemoryDataset):
 
 df_body = []
 
-test_train_split = 0.2 # 20% into test
+test_train_split = 0.25 # 20% into test
 NUM_HIDDEN_DIMS = 64
-NUM_EPOCHS = 700
+NUM_EPOCHS = 400
 
-file_names = ["datasets/user1.tsv", "datasets/user2.tsv", "datasets/user4.tsv", "datasets/user3.tsv"]
+file_names = ["../datasets/user1.tsv", "../datasets/user2.tsv", "../datasets/user4.tsv", "../datasets/user3.tsv"]
 
 
 # stuff we want to change
-modes = [dl.LoadMode.DROP, dl.LoadMode.ONE_HOT, dl.LoadMode.INT]
-rows_per_example_options = [5, 7, 10, 15, 20, 25, 30, 35]
+modes = [dl.LoadMode.ONE_HOT]
+rows_per_example_options = [25, 30, 35]
 
 for rows_per_example in rows_per_example_options:
     for mode in modes:
@@ -123,10 +127,12 @@ for rows_per_example in rows_per_example_options:
                 loss = train(model, data_loader)
                 if epoch % 50 == 0 or epoch == NUM_EPOCHS-1:
                     print(f"Epoch: {epoch:03d}, Loss: {loss:.4f}")
-                if round(loss, 3) == 0:
+                
+                if round(loss, 3) == 0 and round(prev_loss-loss, 2) == 0:
                     print(f"Epoch: {epoch:03d}, Loss: {loss:.4f}")
                     break
-
+            
+                prev_loss = loss
 
             def test(model, data_loader):
                 model.eval()
@@ -152,7 +158,9 @@ for rows_per_example in rows_per_example_options:
                 (rows_per_example, mode, positive_index, acc)
             )
             with open("zz.txt", "a") as f:
-                f.writelines([", ".join((rows_per_example, mode, positive_index, acc))])
+                f.writelines(
+                    [", ".join((str(rows_per_example), str(mode), str(positive_index), str(acc))), "\n"]
+                )
             
 
 df = pd.DataFrame(df_body, columns=["rows_per_example", "mode", "pos_index", "acc"])

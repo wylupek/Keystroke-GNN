@@ -9,7 +9,7 @@ import csv
 import random
 from enum import Enum
 from typing import Tuple, List
-
+import math
 
 
 class LoadMode(Enum):
@@ -25,10 +25,14 @@ class LoadMode(Enum):
     ONE_HOT = 2
 
 
-def create_data_obj(df, edges, y, mode=LoadMode.INT) -> Data:
+def create_data_obj(df, edges, y, mode=LoadMode.INT, use_accel = False) -> Data:
     edge_index = torch.tensor(edges, dtype=torch.long)
+
+    if not use_accel:
+        df = df.drop(columns=['accel_x', 'accel_y', 'accel_z'])
+
     if mode == LoadMode.DROP:
-        node_attributes = torch.from_numpy(df.drop(columns=["key", 'accel_x', 'accel_y', 'accel_z']).values).float()
+        node_attributes = torch.from_numpy(df.drop(columns=["key"]).values).float()
 
     elif mode == LoadMode.INT:
         node_attributes = torch.from_numpy(df.values).float()
@@ -130,13 +134,11 @@ def load_from_file(filepath: str, y: torch.tensor, mode=LoadMode.INT, rows_per_e
 
     df_list = []
     edges_list = []
-    n_splits = len(unprocessed)//rows_per_example
-    i = 0
-    for _ in range(n_splits - 1):
+    
+    for i in range(len(unprocessed) - rows_per_example + 1):
         d, e = process_df(unprocessed.iloc[i:i+rows_per_example])
         df_list.append(d)
         edges_list.append(e)
-        i += rows_per_example
 
     # Last split
     d, e = process_df(unprocessed.iloc[i:])
@@ -147,14 +149,15 @@ def load_from_file(filepath: str, y: torch.tensor, mode=LoadMode.INT, rows_per_e
     return data_objs
 
 
-def get_positive_examples(conn: sqlite3.Connection, user_id: str,
-                          rows_per_example=200, mode=LoadMode.DROP) -> List[Data]:
+def get_user_examples(conn: sqlite3.Connection, user_id: str,
+                          rows_per_example=200, mode=LoadMode.DROP, label:int=1) -> List[Data]:
     """
     Loads and processes data from a database to generate a list of PyTorch Geometric `Data` objects.
     :param conn: Database connection
-    :param user_id: user_id of positive examples
+    :param user_id: user_id of user for which we want to get the examples
     :param mode: Mode for processing node attributes
     :param rows_per_example: Number of rows to include in one example
+    :param label: label to assign to data y attribute
     :return: List[torch_geometric.data.Data]:
         A list of `Data` objects, where each object represents a processed examples containing:
             - `x`: Node attributes as a tensor
@@ -171,20 +174,25 @@ def get_positive_examples(conn: sqlite3.Connection, user_id: str,
 
     df_list = []
     edges_list = []
-    n_splits = len(rows) // rows_per_example
-    i = 0
-    for _ in range(n_splits - 1):
-        d, e = process_df(rows[i:i + rows_per_example])
+    # n_splits = len(rows) // rows_per_example
+    # i = 0
+    # for _ in range(n_splits - 1):
+    #     d, e = process_df(rows[i:i + rows_per_example])
+    #     df_list.append(d)
+    #     edges_list.append(e)
+    #     i += rows_per_example
+
+    for i in range(len(rows) - rows_per_example + 1):
+        d, e = process_df(rows.iloc[i:i+rows_per_example])
         df_list.append(d)
         edges_list.append(e)
-        i += rows_per_example
 
     # Last split
     d, e = process_df(rows[i:])
     df_list.append(d)
     edges_list.append(e)
 
-    data_objs = [create_data_obj(df, edges, y=torch.tensor(1), mode=mode) for df, edges in zip(df_list, edges_list)]
+    data_objs = [create_data_obj(df, edges, y=torch.tensor(label), mode=mode) for df, edges in zip(df_list, edges_list)]
     return data_objs
 
 
@@ -232,7 +240,6 @@ def get_negative_examples(conn: sqlite3.Connection, user_id: str, num_examples: 
             d, e = process_df(rows[starting_index:starting_index + rows_per_example])
             df_list.append(d)
             edges_list.append(e)
-
     else:
         selected_indices = random.sample(sorted(starting_indices), num_examples)
         for starting_index in selected_indices:
@@ -245,7 +252,7 @@ def get_negative_examples(conn: sqlite3.Connection, user_id: str, num_examples: 
 
 
 def load_from_db(database_path: str, user_id: str, positive_negative_ratio: float,
-                 mode=LoadMode.INT, rows_per_example=200) -> List[Data]:
+                 mode=LoadMode.DROP, rows_per_example=200) -> Tuple[List[Data], List[List[Data]]]:
     """
     Loads and processes data from a database to generate a list of PyTorch Geometric `Data` objects.
     :param database_path: Path to database
@@ -266,16 +273,36 @@ def load_from_db(database_path: str, user_id: str, positive_negative_ratio: floa
         print(f"An error occurred while connecting to the database: {e}")
         return []
 
-    positive_examples = get_positive_examples(conn, user_id, rows_per_example, mode)
+    positive_examples = get_user_examples(conn, user_id, rows_per_example, mode)
 
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT user_id FROM key_press
+        WHERE user_id != ?
+    """, (user_id,))
+    rows = pd.DataFrame(cursor.fetchall(), columns=[desc[0] for desc in cursor.description])
+    other_users =set(rows["user_id"].to_list())
+
+    negative_examples = []
     if positive_negative_ratio == 0:
-        negative_examples = (get_negative_examples(conn, user_id, 0,
-                                                   rows_per_example, mode))
+        for user in other_users:
+            neg_user = get_user_examples(conn, user, rows_per_example, mode, label=0)
+            negative_examples.append(neg_user)
+
     else:
-        negative_examples = (get_negative_examples(conn, user_id,
-                                                   int(len(positive_examples) / positive_negative_ratio),
-                                                   rows_per_example, mode))
-    return positive_examples + negative_examples
+        num_neg = len(positive_examples)/positive_negative_ratio
+        neg_per_user = num_neg/len(other_users)
+        for user in other_users:
+            neg_list = get_user_examples(conn, user, rows_per_example, mode, label=0)
+            skip = math.ceil( len(neg_list)/neg_per_user)
+            sampled = neg_list[::skip]
+            print("Len sampled = ", len(sampled))
+            negative_examples.append(sampled)
+            
+    print(len(negative_examples))
+    print(len(negative_examples[0]))
+
+    return positive_examples, negative_examples
 
 
 if __name__ == '__main__':
