@@ -2,15 +2,13 @@ import torch
 import torch_geometric.nn as pyg_nn
 import torch.nn.functional as F
 from torch_geometric.data import InMemoryDataset
-from sklearn.model_selection import train_test_split
 import torch_geometric.loader as torchLoader
-
-import pandas as pd
 from collections import Counter
 
-if __name__ == '__main__':
-    import sys, os
-    sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+import sys
+from pathlib import Path
+PROJECT_ROOT = Path(__file__).absolute().parents[1].absolute()
+sys.path.insert(0, str(PROJECT_ROOT))
 
 from utils.data_loader import load_from_db, LoadMode
 from sklearn.metrics import precision_score, recall_score, f1_score
@@ -58,9 +56,9 @@ class SimpleGraphDataset(InMemoryDataset):
                            class_counts.items()]) + f" | Total: {sum(class_counts.values())}"
 
 
-def train(database_path: str, user_id: str, model_path='', mode=LoadMode.DROP,
-          test_train_split=0.2, hidden_dim=64, epochs_num=1000,
-          rows_per_example=25, positive_negative_ratio=0.5) -> float:
+def train(database_path: str, user_id: str, model_path='', mode=LoadMode.ONE_HOT,
+          test_train_split=0.2, hidden_dim=128, epochs_num=1000,
+          rows_per_example=50, positive_negative_ratio=0.5, offset=10) -> float:
     """
     Train and save the model
     :param database_path: Path to database with key presses
@@ -73,6 +71,7 @@ def train(database_path: str, user_id: str, model_path='', mode=LoadMode.DROP,
     :param rows_per_example: number of key presses per example
     :param positive_negative_ratio: positive to negative class ratio, set 0 to load all examples,
         but take care of class imbalance.
+    :param offset: Number of rows between beginning of each example
     :return: accuracy of the model
     """
     if model_path == '':
@@ -82,15 +81,15 @@ def train(database_path: str, user_id: str, model_path='', mode=LoadMode.DROP,
 
     examples_pos, examples_neg_list = load_from_db(
         database_path=database_path, user_id=user_id, positive_negative_ratio=positive_negative_ratio,
-        mode=mode, rows_per_example=rows_per_example
+        mode=mode, rows_per_example=rows_per_example, offset=offset
     )
 
     if test_train_split > 0.0:
         train_neg = []
         test_neg = []
         for examples_neg in examples_neg_list:
-            # we could user a smaller buffer than rows_per_example since we already skip some
-            # example in the data loading stage, but lets just be safe
+            # we could use a smaller buffer than rows_per_example since we already skip some
+            # example in the data loading stage, but let's just be safe
             tr = examples_neg [
                 0:round((1-test_train_split)*len(examples_neg)) - rows_per_example
             ]
@@ -167,10 +166,9 @@ def train(database_path: str, user_id: str, model_path='', mode=LoadMode.DROP,
         f1 = f1_score(bases, preds)
 
         print(f"Precision: {precision:.4f}, Recall: {recall:.4f}, F1 Score: {f1:.4f}")
-
         return precision
-
     return 0.0
+
 
 def lower_upper_split(lower, upper, l, skip_boundry):
     """
@@ -185,9 +183,10 @@ def lower_upper_split(lower, upper, l, skip_boundry):
 
     return bigger_left+bigger_right, middle
 
-def train_with_crossvalidation(database_path: str, user_id: str, model_path='', mode=LoadMode.DROP,
-          test_train_split=0.2, hidden_dim=64, epochs_num=1000,
-          rows_per_example=25, positive_negative_ratio=0.5) -> float:
+
+def train_with_crossvalidation(database_path: str, user_id: str, model_path='', mode=LoadMode.ONE_HOT,
+          test_train_split=0.2, hidden_dim=128, epochs_num=1000,
+          rows_per_example=50, positive_negative_ratio=0.5, offset=10) -> float:
     """
     copy of the above func just training the model multiple times and performing cross validation
     """
@@ -294,4 +293,5 @@ if __name__ == '__main__':
         user = sys.argv[1]
 
     train("../keystroke_data.sqlite", user,
-        model_path='../models/test.pth', test_train_split=0.2, positive_negative_ratio=1, mode=LoadMode.ONE_HOT, epochs_num=100, hidden_dim=128, rows_per_example=50)
+          model_path='../models/test.pth', test_train_split=0.2, positive_negative_ratio=1,
+          mode=LoadMode.ONE_HOT, epochs_num=100, hidden_dim=128, rows_per_example=50)

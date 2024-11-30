@@ -37,7 +37,7 @@ async def train(request: Request, username: str):
 
     train_fun('keystroke_data.sqlite', username, mode=LoadMode.ONE_HOT,
               test_train_split=0, positive_negative_ratio=1, hidden_dim=128,
-              rows_per_example=50)
+              rows_per_example=50, offset=10)
 
     return {"message": "TSV data received successfully. Training succeeded."}
 
