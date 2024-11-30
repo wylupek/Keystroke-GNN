@@ -1,15 +1,14 @@
 import torch
 from torch.nn.functional import one_hot as oh
 from torch_geometric.data import Data
+
 from utils import letter_encoding
 
 import sqlite3
 import pandas as pd
 import csv
-import random
 from enum import Enum
 from typing import Tuple, List
-import math
 from io import StringIO
 
 
@@ -26,28 +25,42 @@ class LoadMode(Enum):
     ONE_HOT = 2
 
 
-def create_data_obj(df, edges, y, mode=LoadMode.INT, use_accel = False) -> Data:
-    edge_index = torch.tensor(edges, dtype=torch.long)
+def create_data_obj(df: pd.DataFrame, edges: list, y: torch.tensor, mode=LoadMode.ONE_HOT, use_accel=False) -> Data:
+    """
+    Creates Data object from torch_geometric.data
+    :param df: Dataframe with
+        | key: Encoded key values.
+        | accel_x, accel_y, accel_z: Mean accelerometer data grouped by key.
+        | duration_before: Average duration of events before each key.
+        | duration_after: Average duration of events after each key.
+    :param edges: List[List[int], List[int]]:
+        - The first list contains indices of starting keys (edge beginnings).
+        - The second list contains indices of ending keys (edge endings).
+    :param y: data label
+    :param mode: Mode for processing node attributes
+    :param use_accel: whether to use accelerometer data
+    :return: `Data` object that represents a processed example containing:
+        - `x`: Node attributes as a tensor.
+        - `edge_index`: Edge indices tensor of shape [2, num_edges].
+        - `y`: tensor(y).
+    """
 
+    edge_index = torch.tensor(edges, dtype=torch.long)
     if not use_accel:
         df = df.drop(columns=['accel_x', 'accel_y', 'accel_z'])
 
-    if mode == LoadMode.DROP:
-        node_attributes = torch.from_numpy(df.drop(columns=["key"]).values).float()
-
-    elif mode == LoadMode.INT:
-        node_attributes = torch.from_numpy(df.values).float()
-
-    else: # mode == LoadMode.ONE_HOT:
+    if mode == LoadMode.ONE_HOT:
         keys = df["key"].to_list()
         key_tensor = torch.tensor(keys, dtype=torch.long)
         one_hot_keys = oh(key_tensor, num_classes=letter_encoding.AlphabetSize)
         features = torch.from_numpy(df.drop(columns=["key"]).values)
         node_attributes = torch.cat((features, one_hot_keys), dim=1).float()
+    elif mode == LoadMode.DROP:
+        node_attributes = torch.from_numpy(df.drop(columns=["key"]).values).float()
+    else: # mode == LoadMode.INT:
+        node_attributes = torch.from_numpy(df.values).float()
 
-    data = Data(x=node_attributes, edge_index=edge_index, y=y)
-
-    return data
+    return Data(x=node_attributes, edge_index=edge_index, y=y)
 
 
 def process_df(df: pd.DataFrame) -> Tuple[pd.DataFrame, List[List[int]]]:
@@ -59,14 +72,14 @@ def process_df(df: pd.DataFrame) -> Tuple[pd.DataFrame, List[List[int]]]:
         | duration - Duration values for each event.
         | accel_x, accel_y, accel_z - Accelerometer data.
     :return: Tuple:
-            - pd.DataFrame:
-                | key: Encoded key values.
-                | accel_x, accel_y, accel_z: Mean accelerometer data grouped by key.
-                | duration_before: Average duration of events before each key.
-                | duration_after: Average duration of events after each key.
-            - List[List[int], List[int]]:
-                - The first list contains indices of starting keys (edge beginnings).
-                - The second list contains indices of ending keys (edge endings).
+        - pd.DataFrame:
+            | key: Encoded key values.
+            | accel_x, accel_y, accel_z: Mean accelerometer data grouped by key.
+            | duration_before: Average duration of events before each key.
+            | duration_after: Average duration of events after each key.
+        - List[List[int], List[int]]:
+            - The first list contains indices of starting keys (edge beginnings).
+            - The second list contains indices of ending keys (edge endings).
     """
     avg_duration_before = {}
     avg_duration_after = {}
@@ -114,16 +127,17 @@ def process_df(df: pd.DataFrame) -> Tuple[pd.DataFrame, List[List[int]]]:
     return df, [edge_beginnings, edge_endings]
 
 
-def load_from_file(filepath: str, y: torch.tensor, mode=LoadMode.INT, rows_per_example=200) -> List[Data]:
+def load_from_file(filepath: str, y: torch.tensor, mode=LoadMode.ONE_HOT, rows_per_example=50, offset=10) -> List[Data]:
     """
     Loads and processes data from a file to generate a list of PyTorch Geometric `Data` objects.
     :param filepath: str: Path to the input .tsv file
-            | key - Key identifying each event.
-            | duration - Duration values for each event.
-            | accel_x, accel_y, accel_z - Accelerometer data.
+        | key - Key identifying each event.
+        | duration - Duration values for each event.
+        | accel_x, accel_y, accel_z - Accelerometer data.
     :param y: data label
     :param mode: Mode for processing node attributes
     :param rows_per_example: Number of rows to include in one example
+    :param offset: Number of rows between beginning of each example
     :return: List[torch_geometric.data.Data]:
         A list of `Data` objects, where each object represents a processed example
         containing:
@@ -135,28 +149,24 @@ def load_from_file(filepath: str, y: torch.tensor, mode=LoadMode.INT, rows_per_e
 
     df_list = []
     edges_list = []
-    
-    for i in range(len(unprocessed) - rows_per_example + 1):
-        d, e = process_df(unprocessed.iloc[i:i+rows_per_example])
+
+    i = 0
+    while i + rows_per_example <= len(unprocessed):
+        d, e = process_df(unprocessed.iloc[i : i + rows_per_example])
         df_list.append(d)
         edges_list.append(e)
+        i += offset
 
-    # Last split
-    d, e = process_df(unprocessed.iloc[i:])
-    df_list.append(d)
-    edges_list.append(e)
-
-    data_objs = [create_data_obj(df, edges, y=y, mode=mode) for df, edges in zip(df_list, edges_list)]
-    return data_objs
+    return [create_data_obj(df, edges, y=y, mode=mode) for df, edges in zip(df_list, edges_list)]
 
 
-def load_from_str(content: str, y: torch.tensor, mode=LoadMode.DROP, rows_per_example=200, offset=200) -> List[Data]:
+def load_from_str(content: str, y: torch.tensor, mode=LoadMode.ONE_HOT, rows_per_example=50, offset=10) -> List[Data]:
     """
     Loads and processes data from a string to generate a list of PyTorch Geometric `Data` objects.
     :param content: str: string with .tsv content
-            | key - Key identifying each event.
-            | duration - Duration values for each event.
-            | accel_x, accel_y, accel_z - Accelerometer data.
+        | key - Key identifying each event.
+        | duration - Duration values for each event.
+        | accel_x, accel_y, accel_z - Accelerometer data.
     :param y: data label
     :param mode: Mode for processing node attributes
     :param rows_per_example: Number of rows to include in one example
@@ -174,37 +184,31 @@ def load_from_str(content: str, y: torch.tensor, mode=LoadMode.DROP, rows_per_ex
     edges_list = []
 
     i = 0
-    while i+rows_per_example < len(unprocessed):
-        d, e = process_df(unprocessed.iloc[i:i+rows_per_example])
+    while i + rows_per_example <= len(unprocessed):
+        d, e = process_df(unprocessed.iloc[i : i + rows_per_example])
         df_list.append(d)
         edges_list.append(e)
         i += offset
 
-    # Last split
-    d, e = process_df(unprocessed.iloc[i:])
-    df_list.append(d)
-    edges_list.append(e)
-
-    data_objs = [create_data_obj(df, edges, y=y, mode=mode) for df, edges in zip(df_list, edges_list)]
-    return data_objs
+    return [create_data_obj(df, edges, y=y, mode=mode) for df, edges in zip(df_list, edges_list)]
 
 
 def get_user_examples(conn: sqlite3.Connection, user_id: str,
-                          rows_per_example=200, mode=LoadMode.DROP, label:int=1) -> List[Data]:
+                          y: torch.tensor, mode=LoadMode.ONE_HOT, rows_per_example=50, offset=10) -> List[Data]:
     """
     Loads and processes data from a database to generate a list of PyTorch Geometric `Data` objects.
     :param conn: Database connection
     :param user_id: user_id of user for which we want to get the examples
+    :param y: data label
     :param mode: Mode for processing node attributes
     :param rows_per_example: Number of rows to include in one example
-    :param label: label to assign to data y attribute
+    :param offset: Number of rows between beginning of each example
     :return: List[torch_geometric.data.Data]:
         A list of `Data` objects, where each object represents a processed examples containing:
-            - `x`: Node attributes as a tensor
+            - `x`: Node attributes as a tensor.
             - `edge_index`: Edge indices tensor of shape [2, num_edges].
-            - `y`: tensor(1)
+            - `y`: tensor(y).
     """
-    # TODO add checking date (timestamp)
     cursor = conn.cursor()
     cursor.execute("""
         SELECT * FROM key_press
@@ -215,85 +219,23 @@ def get_user_examples(conn: sqlite3.Connection, user_id: str,
 
     df_list = []
     edges_list = []
-    # n_splits = len(rows) // rows_per_example
-    # i = 0
-    # for _ in range(n_splits - 1):
-    #     d, e = process_df(rows[i:i + rows_per_example])
-    #     df_list.append(d)
-    #     edges_list.append(e)
-    #     i += rows_per_example
 
-    for i in range(len(rows) - rows_per_example + 1):
-        d, e = process_df(rows.iloc[i:i+rows_per_example])
-        df_list.append(d)
-        edges_list.append(e)
-
-    # Last split
-    d, e = process_df(rows[i:])
-    df_list.append(d)
-    edges_list.append(e)
-
-    data_objs = [create_data_obj(df, edges, y=torch.tensor(label), mode=mode) for df, edges in zip(df_list, edges_list)]
-    return data_objs
-
-
-def get_negative_examples(conn: sqlite3.Connection, user_id: str, num_examples: int,
-                          rows_per_example=200, mode=LoadMode.DROP) -> List[Data]:
-    """
-    Loads and processes data from a database to generate a list of PyTorch Geometric `Data` objects.
-    :param conn: Database connection
-    :param user_id: user_id of positive examples
-    :param mode: Mode for processing node attributes
-    :param rows_per_example: Number of rows to include in one example
-    :param num_examples: Number of negative examples to include
-    :return: List[torch_geometric.data.Data]:
-        A list of `Data` objects, where each object represents a processed examples containing:
-            - `x`: Node attributes as a tensor
-            - `edge_index`: Edge indices tensor of shape [2, num_edges].
-            - `y`: tensor(0)
-    """
-    cursor = conn.cursor()
-    cursor.execute("""
-        SELECT * FROM key_press
-        WHERE user_id != ?
-        ORDER BY press_time
-    """, (user_id,))
-    rows = pd.DataFrame(cursor.fetchall(), columns=[desc[0] for desc in cursor.description])
-
-    total_rows = len(rows)
-    starting_indices = set()
-    index = 0
-    while index <= total_rows - rows_per_example:
-        if rows.iloc[index]['user_id'] == rows.iloc[index + rows_per_example - 1]['user_id'] and \
-                rows.iloc[index]['date'] == rows.iloc[index + rows_per_example - 1]['date']:
-                starting_indices.add(index)
-                index += rows_per_example
+    i = 0
+    while i + rows_per_example <= len(rows):
+        if rows.iloc[i]['timestamp'] == rows.iloc[i + rows_per_example - 1]['timestamp']:
+            # print(f"{user_id} [{i} : {i + rows_per_example}]")
+            d, e = process_df(rows.iloc[i : i + rows_per_example])
+            df_list.append(d)
+            edges_list.append(e)
+            i += offset
         else:
-            index += 1
+            i += 1
 
-    df_list = []
-    edges_list = []
-    total_starting_indices = len(starting_indices)
-    if num_examples >= total_starting_indices or num_examples == 0:
-        if num_examples > total_starting_indices:
-            print(f"Warning: expected {num_examples} examples, but got {total_starting_indices}")
-        for starting_index in starting_indices:
-            d, e = process_df(rows[starting_index:starting_index + rows_per_example])
-            df_list.append(d)
-            edges_list.append(e)
-    else:
-        selected_indices = random.sample(sorted(starting_indices), num_examples)
-        for starting_index in selected_indices:
-            d, e = process_df(rows[starting_index:starting_index + rows_per_example])
-            df_list.append(d)
-            edges_list.append(e)
-
-    data_objs = [create_data_obj(df, edges, y=torch.tensor(0), mode=mode) for df, edges in zip(df_list, edges_list)]
-    return data_objs
+    return [create_data_obj(df, edges, y=torch.tensor(y), mode=mode) for df, edges in zip(df_list, edges_list)]
 
 
 def load_from_db(database_path: str, user_id: str, positive_negative_ratio: float,
-                 mode=LoadMode.DROP, rows_per_example=200) -> Tuple[List[Data], List[List[Data]]]:
+                 mode=LoadMode.ONE_HOT, rows_per_example=50, offset=10) -> Tuple[List[Data], List[List[Data]]]:
     """
     Loads and processes data from a database to generate a list of PyTorch Geometric `Data` objects.
     :param database_path: Path to database
@@ -301,6 +243,7 @@ def load_from_db(database_path: str, user_id: str, positive_negative_ratio: floa
     :param mode: Mode for processing node attributes
     :param rows_per_example: Number of rows to include in one example. Set to 0 to load all examples
     :param positive_negative_ratio: Positive to negative examples ratio
+    :param offset: Number of rows between beginning of each example
     :return: List[torch_geometric.data.Data]:
         A list of `Data` objects, where each object represents a processed examples containing:
             - `x`: Node attributes as a tensor
@@ -312,40 +255,49 @@ def load_from_db(database_path: str, user_id: str, positive_negative_ratio: floa
         conn = sqlite3.connect(database_path)
     except sqlite3.Error as e:
         print(f"An error occurred while connecting to the database: {e}")
-        return []
+        return [], []
 
-    positive_examples = get_user_examples(conn, user_id, rows_per_example, mode)
+    positive_examples = get_user_examples(conn, user_id, y=1,
+                                          mode=mode, rows_per_example=rows_per_example, offset=offset)
 
     cursor = conn.cursor()
     cursor.execute("""
-        SELECT user_id FROM key_press
-        WHERE user_id != ?
+        SELECT DISTINCT user_id
+        FROM key_press
+        where user_id != ?
     """, (user_id,))
-    rows = pd.DataFrame(cursor.fetchall(), columns=[desc[0] for desc in cursor.description])
-    other_users =set(rows["user_id"].to_list())
+    other_users = [i[0] for i in cursor.fetchall()]
 
     negative_examples = []
     if positive_negative_ratio == 0:
         for user in other_users:
-            neg_user = get_user_examples(conn, user, rows_per_example, mode, label=0)
-            negative_examples.append(neg_user)
+            negative_examples.extend(
+                get_user_examples(conn, user, y=0,
+                                  mode=mode, rows_per_example=rows_per_example, offset=offset)
+            )
 
     else:
-        num_neg = len(positive_examples)/positive_negative_ratio
-        neg_per_user = num_neg/len(other_users)
+        neg_per_user = int((len(positive_examples) / positive_negative_ratio) // len(other_users))
         for user in other_users:
-            neg_list = get_user_examples(conn, user, rows_per_example, mode, label=0)
-            skip = math.ceil( len(neg_list)/neg_per_user)
-            sampled = neg_list[::skip]
-            print("Len sampled = ", len(sampled))
-            negative_examples.append(sampled)
-            
-    print(len(negative_examples))
-    print(len(negative_examples[0]))
+            neg_list = get_user_examples(conn, user, y=0,
+                                         mode=mode, rows_per_example=rows_per_example, offset=offset)
+
+            if neg_per_user >= len(neg_list):
+                negative_examples.append(neg_list)
+                continue
+
+            step = (len(neg_list) - 1) / (neg_per_user - 1)
+            selected_indices = [round(i * step) for i in range(neg_per_user)]
+            negative_examples.append([neg_list[i] for i in selected_indices])
+
+    print(f"*** DATA LOADER INFO ***\n"
+          f"Positives: {len(positive_examples)}\n"
+          f"Negatives: {sum(len(x) for x in negative_examples)} {[len(x) for x in negative_examples]}"
+          f"************************\n")
 
     return positive_examples, negative_examples
 
 
 if __name__ == '__main__':
-    # load_from_file('datasets/user1.tsv', torch.tensor([1]), LoadMode.DROP, 20)
-    load_from_db("user2", 0.5, mode=LoadMode.DROP, rows_per_example=10)
+    load_from_db('./keystroke_data.sqlite', 'user4', positive_negative_ratio=1,
+                 rows_per_example=100, offset=30)
