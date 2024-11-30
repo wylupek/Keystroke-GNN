@@ -4,7 +4,6 @@ import glob
 import csv
 from io import StringIO
 from datetime import datetime
-import time
 
 
 def print_tsv(content: list[dict]) -> None:
@@ -13,8 +12,7 @@ def print_tsv(content: list[dict]) -> None:
         print(f"{row['key']}\t{row['press_time']}\t{row['duration']}\t{row['accel_x']}\t{row['accel_y']}\t{row['accel_z']}")
 
 
-def save_tsv(content: str, username: str):
-    base_path = './datasets/'
+def save_tsv(content: str, base_path:str, username: str):
     base_filename = username + '.tsv'
     file_path = os.path.join(base_path, base_filename)
 
@@ -28,7 +26,7 @@ def save_tsv(content: str, username: str):
     # Save the file
     with open(file_path, "w") as file:
         file.write(content)
-    print(f"File saved as: {file_path}")
+        print(f"File saved as: {file_path}")
 
 
 def drop_table() -> bool:
@@ -79,7 +77,7 @@ def create_table() -> bool:
                 accel_x REAL NOT NULL,
                 accel_y REAL NOT NULL,
                 accel_z REAL NOT NULL,
-                date DATE NOT NULL
+                timestamp TIMESTAMP NOT NULL
             )
         ''')
         conn.commit()
@@ -112,10 +110,10 @@ def add_tsv_values(content: list[dict], user_id: str) -> bool:
         cursor = conn.cursor()
 
         # Prepare and execute the insert statements
-        current_datetime = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        timestamp = datetime.now().isoformat()
         for entry in content:
             cursor.execute('''
-                INSERT INTO key_press (user_id, key, press_time, duration, accel_x, accel_y, accel_z, date)
+                INSERT INTO key_press (user_id, key, press_time, duration, accel_x, accel_y, accel_z, timestamp)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             ''', (
                 user_id,
@@ -125,7 +123,7 @@ def add_tsv_values(content: list[dict], user_id: str) -> bool:
                 entry["accel_x"],
                 entry["accel_y"],
                 entry["accel_z"],
-                current_datetime
+                timestamp
             ))
 
         conn.commit()
@@ -178,7 +176,6 @@ def load_file(file_name: str) -> bool:
         return False
 
 
-# TODO Test it with the same username in multiple files
 def load_dir(dir_name: str) -> bool:
     """
     Load all .tsv files from the specified directory and insert their data into the database,
@@ -197,7 +194,6 @@ def load_dir(dir_name: str) -> bool:
             if not load_file(tsv_file):
                 print(f"Failed to process file {tsv_file}.")
                 return False
-            time.sleep(1)
 
         print("All files have been processed successfully.")
         return True

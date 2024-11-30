@@ -1,10 +1,9 @@
 from fastapi import FastAPI, Request
 import uvicorn
 import os
-
-from utils import database_utils
 from dotenv import load_dotenv
 
+from utils import database_utils
 from utils.inference import inference as inference_fun
 from utils.train import train as train_fun, LoadMode
 
@@ -19,8 +18,10 @@ def hello():
 async def upload_tsv(request: Request, username: str):
     tsv_data = await request.body()
     tsv_str = tsv_data.decode('utf-8')
-    database_utils.load_str(tsv_str, username, skip_header=True)
-    database_utils.save_tsv(tsv_str, "training/" + username)
+
+    if not database_utils.load_str(tsv_str, username, skip_header=True):
+        return {"message": "Error: Couldn't load the data"}
+    database_utils.save_tsv(content=tsv_str, base_path="./datasets/training/", username=username)
 
     return {"message": "TSV data received successfully"}
 
@@ -29,12 +30,16 @@ async def upload_tsv(request: Request, username: str):
 async def train(request: Request, username: str):
     tsv_data = await request.body()
     tsv_str = tsv_data.decode('utf-8')
-    database_utils.load_str(tsv_str, username, skip_header=True)
-    database_utils.save_tsv(tsv_str, "training/" + username)
 
-    train_fun('keystroke_data.sqlite', username,
-              rows_per_example=50, test_train_split=0, positive_negative_ratio=1, mode=LoadMode.ONE_HOT, hidden_dim=128)
-    return {"message": "TSV data received successfully"}
+    if not database_utils.load_str(tsv_str, username, skip_header=True):
+        return {"message": "Error: Couldn't load the data"}
+    database_utils.save_tsv(content=tsv_str, base_path="./datasets/training/", username=username)
+
+    train_fun('keystroke_data.sqlite', username, mode=LoadMode.ONE_HOT,
+              test_train_split=0, positive_negative_ratio=1, hidden_dim=128,
+              rows_per_example=50)
+
+    return {"message": "TSV data received successfully. Training succeeded."}
 
 
 @app.post("/inference")
@@ -43,7 +48,7 @@ async def inference(request: Request, username: str):
     tsv_str = tsv_data.decode('utf-8')
 
     score, prediction = inference_fun(username, tsv_str)
-    return {"message": "TSV data received successfully",
+    return {"message": "TSV data received successfully. Inference succeeded",
             "score": score,
             "prediction": prediction}
 
