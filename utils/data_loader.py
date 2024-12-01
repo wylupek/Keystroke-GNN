@@ -292,7 +292,7 @@ def load_from_db(database_path: str, user_id: str, positive_negative_ratio: floa
 
     print(f"*** DATA LOADER INFO ***\n"
           f"Positives: {len(positive_examples)}\n"
-          f"Negatives: {sum(len(x) for x in negative_examples)} {[len(x) for x in negative_examples]}"
+          f"Negatives: {sum(len(x) for x in negative_examples)} {[len(x) for x in negative_examples]}\n"
           f"************************\n")
 
     return positive_examples, negative_examples
