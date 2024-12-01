@@ -1,0 +1,16 @@
+# .gitignore
+keystroke_data.sqlite
+
+__pycache__/
+.ipynb_checkpoints
+
+.env
+.venv
+env/
+venv/
+
+.idea/
+# ***
+
+models/*.pth
+playground/

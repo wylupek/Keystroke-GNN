@@ -5,7 +5,8 @@ openssl req -x509 -newkey rsa:4096 -keyout key.pem -out cert.pem -days 365 -conf
 openssl x509 -outform der -in cert.pem -out cert.crt
 ```
 ### Server
-Put `key.pem` and `cert.pem` into `ssl/`.
+Put `key.pem` and `cert.pem` into `/ssl/`. \
+Create `/.env` file with `SSL_PASSPHRASE=<passphrase>` in it.
 
 ### Client
 Create a `res/raw` directory in your Android project, and place `cert.crt` there.
