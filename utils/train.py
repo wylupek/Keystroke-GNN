@@ -16,7 +16,7 @@ from sklearn.metrics import precision_score, recall_score, f1_score
 
 # Define a simple GCN model
 class LetterGNN(torch.nn.Module):
-    def __init__(self, num_node_features, hidden_dim, num_classes, num_layers=2):
+    def __init__(self, num_node_features, hidden_dim, num_classes, num_layers=3):
         super(LetterGNN, self).__init__()
 
         self.convs = torch.nn.ModuleList()
@@ -45,13 +45,13 @@ class LetterGNN(torch.nn.Module):
 class SimpleGraphDataset(InMemoryDataset):
     def __init__(self, data_list):
         super(SimpleGraphDataset, self).__init__('.', None, None, None)
-        self.data, self.slices = self.collate(data_list)  # Collate all data objects
+        self._data, self.slices = self.collate(data_list)  # Collate all data objects
 
     def __len__(self):
-        return len(self.data.y)  # Number of graphs in the dataset
+        return len(self._data.y)  # Number of graphs in the dataset
 
     def statistics(self) -> str:
-        class_counts = Counter(self.data.y.cpu().numpy())
+        class_counts = Counter(self._data.y.cpu().numpy())
         return " | ".join([f"{item_class}: {count}" for item_class, count in
                            class_counts.items()]) + f" | Total: {sum(class_counts.values())}"
 
@@ -191,6 +191,20 @@ def train_with_crossvalidation(database_path: str, user_id: str, model_path='', 
     copy of the above func just training the model multiple times and performing cross validation
     """
 
+    def lower_upper_split(lower, upper, l, skip_boundry):
+        from math import floor
+        
+        bigger_left = l[
+            0 : 
+            floor(max(0, lower*len(l)-skip_boundry))
+        ]
+        middle = l[
+            floor(lower*len(l)) : floor(upper*len(l))-skip_boundry]
+        bigger_right = l[ floor(upper*len(l)): ]
+
+        return bigger_left+bigger_right, middle
+
+
     if model_path == '':
         model_path = f'models/{user_id}.pth'
 
@@ -198,7 +212,7 @@ def train_with_crossvalidation(database_path: str, user_id: str, model_path='', 
 
     examples_pos, examples_neg_list = load_from_db(
         database_path=database_path, user_id=user_id, positive_negative_ratio=positive_negative_ratio,
-        mode=mode, rows_per_example=rows_per_example
+        mode=mode, rows_per_example=rows_per_example, offset=1
     )
 
     k = 1/test_train_split
@@ -224,6 +238,7 @@ def train_with_crossvalidation(database_path: str, user_id: str, model_path='', 
 
             train_pos, test_pos = lower_upper_split(lower, upper, examples_pos, rows_per_example)
             
+
             train_examples = train_pos + train_neg
             test_examples = test_pos + test_neg
             print(f"train_examples {len(train_examples)}")
@@ -231,6 +246,7 @@ def train_with_crossvalidation(database_path: str, user_id: str, model_path='', 
 
             train_examples = SimpleGraphDataset([e.to(device) for e in train_examples])
             test_examples = SimpleGraphDataset([e.to(device) for e in test_examples])
+
             print("Train dataset statistics: ", train_examples.statistics())
             print("Test dataset statistics:  ", test_examples.statistics())
         else:
@@ -247,6 +263,8 @@ def train_with_crossvalidation(database_path: str, user_id: str, model_path='', 
 
         # Training over epochs
         data_loader = torchLoader.DataLoader(train_examples, batch_size=32, shuffle=True)
+        best_model = None
+        smallest_loss = 1000
         for epoch in range(1, epochs_num):
             model.train()
             total_loss = 0
@@ -258,13 +276,29 @@ def train_with_crossvalidation(database_path: str, user_id: str, model_path='', 
                 optimizer.step()  # Update the model parameters
                 total_loss += loss.item()
             loss = total_loss / len(data_loader)
+
+            # # Validate the model
+            # model.eval()
+            # validate_loader = torchLoader.DataLoader(validate_examples, batch_size=1, shuffle=False)
+            # validate_preds = []
+            # validate_bases = []
+            # for data in validate_loader:
+            #     output = model(data.x, data.edge_index, data.batch)
+            #     pred = output.argmax(dim=1)
+            #     validate_bases.append(data.y[0].item())
+            #     validate_preds.append(pred[0].item())
+            # validate_precision = precision_score(validate_bases, validate_preds)
+            if loss < smallest_loss:
+                smallest_loss = loss
+                best_model = model.state_dict()
+
             if epoch % 50 == 0 or epoch == epochs_num - 1:
                 print(f"Epoch: {epoch:03d}, Loss: {loss:.4f}")
             if round(loss, 3) == 0:
                 print(f"Epoch: {epoch:03d}, Loss: {loss:.4f}")
                 break
 
-        torch.save(model.state_dict(), model_path)
+        torch.save(best_model, model_path)
 
         if len(test_examples):
             test_loader = torchLoader.DataLoader(test_examples, batch_size=1, shuffle=False)
@@ -282,7 +316,8 @@ def train_with_crossvalidation(database_path: str, user_id: str, model_path='', 
             f1 = f1_score(bases, preds)
 
             print(f"Precision: {precision:.4f}, Recall: {recall:.4f}, F1 Score: {f1:.4f}")
-
+            with open(f"dupa_{user_id}.txt", "a") as f:
+                f.write(f"Precision: {precision:.4f}, Recall: {recall:.4f}, F1 Score: {f1:.4f}\n")
 
     return 0.0
    
@@ -292,6 +327,6 @@ if __name__ == '__main__':
     if len(sys.argv) > 1:
         user = sys.argv[1]
 
-    train("../keystroke_data.sqlite", user,
+    train_with_crossvalidation("../keystroke_data.sqlite", user,
           model_path='../models/test.pth', test_train_split=0.2, positive_negative_ratio=1,
-          mode=LoadMode.ONE_HOT, epochs_num=100, hidden_dim=128, rows_per_example=50)
+          mode=LoadMode.ONE_HOT, epochs_num=500, hidden_dim=256, rows_per_example=50)
