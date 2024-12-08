@@ -16,7 +16,7 @@ from sklearn.metrics import precision_score, recall_score, f1_score
 
 # Define a simple GCN model
 class LetterGNN(torch.nn.Module):
-    def __init__(self, num_node_features, hidden_dim, num_classes, num_layers=3):
+    def __init__(self, num_node_features, hidden_dim, num_classes, num_layers=2):
         super(LetterGNN, self).__init__()
 
         self.convs = torch.nn.ModuleList()
@@ -170,20 +170,6 @@ def train(database_path: str, user_id: str, model_path='', mode=LoadMode.ONE_HOT
     return 0.0
 
 
-def lower_upper_split(lower, upper, l, skip_boundry):
-    """
-    """
-
-    bigger_left = l[
-        0 : 
-        max(0, lower*len(l)-skip_boundry)
-    ]
-    middle = l[lower*len(l) : upper*len(l)-skip_boundry]
-    bigger_right = l[ upper*len(l): ]
-
-    return bigger_left+bigger_right, middle
-
-
 def train_with_crossvalidation(database_path: str, user_id: str, model_path='', mode=LoadMode.ONE_HOT,
           test_train_split=0.2, hidden_dim=128, epochs_num=1000,
           rows_per_example=50, positive_negative_ratio=0.5, offset=10) -> float:
@@ -199,8 +185,8 @@ def train_with_crossvalidation(database_path: str, user_id: str, model_path='', 
             floor(max(0, lower*len(l)-skip_boundry))
         ]
         middle = l[
-            floor(lower*len(l)) : floor(upper*len(l))-skip_boundry]
-        bigger_right = l[ floor(upper*len(l)): ]
+            floor(lower*len(l)) : floor(upper*len(l))]
+        bigger_right = l[ floor(upper*len(l)) + skip_boundry: ]
 
         return bigger_left+bigger_right, middle
 
@@ -311,13 +297,17 @@ def train_with_crossvalidation(database_path: str, user_id: str, model_path='', 
                 bases.append(data.y[0].item())
                 preds.append(pred[0].item())
 
-            precision = precision_score(bases, preds)
-            recall = recall_score(bases, preds)
-            f1 = f1_score(bases, preds)
+            # precision = precision_score(bases, preds)
+            # recall = recall_score(bases, preds)
+            # f1 = f1_score(bases, preds)
+            tp = sum((p == 1 and b == 1) for p, b in zip(preds, bases))
+            fp = sum((p == 1 and b == 0) for p, b in zip(preds, bases))
+            tn = sum((p == 0 and b == 0) for p, b in zip(preds, bases))
+            fn = sum((p == 0 and b == 1) for p, b in zip(preds, bases))
 
-            print(f"Precision: {precision:.4f}, Recall: {recall:.4f}, F1 Score: {f1:.4f}")
+            print(f"TP: {tp}, FP: {fp}, TN: {tn}, FN: {fn}")
             with open(f"dupa_{user_id}.txt", "a") as f:
-                f.write(f"Precision: {precision:.4f}, Recall: {recall:.4f}, F1 Score: {f1:.4f}\n")
+                f.write(f"TP: {tp}, FP: {fp}, TN: {tn}, FN: {fn}\n")
 
     return 0.0
    
@@ -327,6 +317,13 @@ if __name__ == '__main__':
     if len(sys.argv) > 1:
         user = sys.argv[1]
 
-    train_with_crossvalidation("../keystroke_data.sqlite", user,
-          model_path='../models/test.pth', test_train_split=0.2, positive_negative_ratio=1,
-          mode=LoadMode.ONE_HOT, epochs_num=500, hidden_dim=256, rows_per_example=50)
+    for dims in [256]:
+        for mode in [LoadMode.ONE_HOT, LoadMode.DROP]:
+            for row_per_example in [35, 40, 50]:
+                with open(f"dupa_{user}.txt", "a") as f:
+                    f.write(f"dims: {dims}, rows: {row_per_example}, mode: {str(mode)}\n")
+
+                train_with_crossvalidation("../keystroke_data.sqlite", user,
+                    model_path='../models/test.pth', test_train_split=0.2, positive_negative_ratio=1,
+                    mode=mode, epochs_num=500, hidden_dim=dims, rows_per_example=row_per_example)
+
