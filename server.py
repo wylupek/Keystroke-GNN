@@ -1,8 +1,5 @@
 from fastapi import FastAPI, Request
 import uvicorn
-import os
-from dotenv import load_dotenv
-
 from utils import database_utils
 from utils.inference import inference as inference_fun
 from utils.train import train as train_fun, LoadMode
@@ -54,11 +51,20 @@ async def inference(request: Request, username: str):
 
 
 def main():
+    import os
+    from dotenv import load_dotenv
     load_dotenv()
-    ssl_key_file = os.getenv("SSL_KEY_FILE_PATH")
-    ssl_cert_file = os.getenv("SSL_CERT_FILE_PATH")
-    print(ssl_key_file, ssl_cert_file)
-    uvicorn.run(app, host="192.168.1.100", port=8000, ssl_keyfile=ssl_key_file, ssl_certfile=ssl_cert_file)
+
+    ssl_key_file = "ssl/key.pem"
+    ssl_cert_file = "ssl/cert.pem"
+    ssl_key_passphrase = os.getenv("SSL_PASSPHRASE")
+
+    uvicorn.run(app,
+                host="0.0.0.0",
+                port=8000,
+                ssl_keyfile=ssl_key_file,
+                ssl_certfile=ssl_cert_file,
+                ssl_keyfile_password=ssl_key_passphrase)
 
 
 if __name__ == "__main__":

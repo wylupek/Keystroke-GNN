@@ -1,3 +1,4 @@
+# .gitignore
 keystroke_data.sqlite
 
 __pycache__/
@@ -9,3 +10,7 @@ env/
 venv/
 
 .idea/
+# ***
+
+models/*.pth
+playground/
