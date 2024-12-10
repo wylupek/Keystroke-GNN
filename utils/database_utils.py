@@ -135,6 +135,7 @@ def add_tsv_values(content: list[dict], user_id: str) -> bool:
         print(f"An error occurred while adding TSV values: {e}")
         return False
 
+keys_to_drop = ["EPH"]
 
 def load_file(file_name: str) -> bool:
     """
@@ -153,7 +154,7 @@ def load_file(file_name: str) -> bool:
             # Convert data rows to list of dictionaries
             key_presses = []
             for row in reader:
-                if len(row) == 6:
+                if len(row) == 6 and str(row[0]) not in keys_to_drop:
                     key_presses.append({
                         "key": str(row[0]),
                         "press_time": str(row[1]),

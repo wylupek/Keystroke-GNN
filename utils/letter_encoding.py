@@ -250,7 +250,21 @@ def char_to_enum(char):
         '6': Alphabet.SIX,
         '7': Alphabet.SEVEN,
         '8': Alphabet.EIGHT,
-        '9': Alphabet.NINE
+        '9': Alphabet.NINE, 
+
+        # special chars
+        'QM': Alphabet.DOUBLE_QUOTE,
+        'AP': Alphabet.QUOTE,
+        'BS': Alphabet.BACKSLASH,
+        'TB': Alphabet.SPACE,
+        'BS': Alphabet.DEL,
+        'DS': Alphabet.DOLLAR,
+
+        # weird letters we wish we didn't have
+        "è" : Alphabet.ę,
+        "ë" : Alphabet.ę,
+        "ö" : Alphabet.ó
+
 
     }
     e = char_map.get(char, None)

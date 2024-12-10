@@ -1,0 +1,40 @@
+dims: 128, rows: 20, mode: LoadMode.ONE_HOT
+TP: 567, FP: 33, TN: 540, FN: 8
+TP: 520, FP: 17, TN: 559, FN: 56
+TP: 558, FP: 40, TN: 536, FN: 17
+TP: 508, FP: 16, TN: 560, FN: 68
+TP: 479, FP: 23, TN: 553, FN: 97
+dims: 128, rows: 30, mode: LoadMode.ONE_HOT
+TP: 573, FP: 22, TN: 551, FN: 0
+TP: 554, FP: 11, TN: 562, FN: 20
+TP: 572, FP: 22, TN: 551, FN: 1
+TP: 482, FP: 8, TN: 565, FN: 92
+TP: 548, FP: 29, TN: 547, FN: 26
+dims: 128, rows: 40, mode: LoadMode.ONE_HOT
+TP: 571, FP: 15, TN: 555, FN: 0
+TP: 542, FP: 21, TN: 549, FN: 30
+TP: 568, FP: 25, TN: 548, FN: 3
+TP: 492, FP: 8, TN: 562, FN: 80
+TP: 526, FP: 10, TN: 563, FN: 46
+dims: 128, rows: 50, mode: LoadMode.ONE_HOT
+TP: 569, FP: 3, TN: 564, FN: 0
+TP: 515, FP: 13, TN: 557, FN: 55
+TP: 568, FP: 12, TN: 558, FN: 1
+TP: 459, FP: 12, TN: 558, FN: 111
+TP: 529, FP: 6, TN: 564, FN: 41
+dims: 256, rows: 35, mode: LoadMode.ONE_HOT
+TP: 570, FP: 8, TN: 562, FN: 2
+TP: 548, FP: 12, TN: 561, FN: 25
+TP: 570, FP: 32, TN: 541, FN: 2
+TP: 446, FP: 2, TN: 571, FN: 127
+TP: 506, FP: 17, TN: 556, FN: 67
+
+dims: 256, rows: 40, mode: LoadMode.ONE_HOT
+TP: 571, FP: 7, TN: 563, FN: 0
+TP: 475, FP: 7, TN: 563, FN: 97
+TP: 559, FP: 35, TN: 538, FN: 12
+TP: 477, FP: 5, TN: 565, FN: 95
+TP: 503, FP: 13, TN: 560, FN: 69
+dims: 256, rows: 50, mode: LoadMode.ONE_HOT
+TP: 569, FP: 6, TN: 561, FN: 0
+TP: 490, FP: 23, TN: 547, FN: 80

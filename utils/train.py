@@ -4,6 +4,7 @@ import torch.nn.functional as F
 from torch_geometric.data import InMemoryDataset
 import torch_geometric.loader as torchLoader
 from collections import Counter
+import pandas as pd
 
 import sys
 from pathlib import Path
@@ -16,17 +17,32 @@ from sklearn.metrics import precision_score, recall_score, f1_score
 
 # Define a simple GCN model
 class LetterGNN(torch.nn.Module):
-    def __init__(self, num_node_features, hidden_dim, num_classes, num_layers=2):
+    def __init__(self, num_node_features, hidden_dim, num_classes, num_layers, use_fc_before):
         super(LetterGNN, self).__init__()
 
+        # self for later
+        self.num_featues = num_node_features
+
         self.convs = torch.nn.ModuleList()
-        self.convs.append(pyg_nn.GCNConv(num_node_features, hidden_dim))
+        if use_fc_before:
+            self.fc_before = torch.nn.Linear(num_node_features, hidden_dim)
+            self.fc_before_relu = F.relu
+            self.convs.append(pyg_nn.GCNConv(hidden_dim, hidden_dim))
+        else:
+            self.fc_before = torch.nn.Identity()
+            self.fc_before_relu = torch.nn.Identity()
+            self.convs.append(pyg_nn.GCNConv(num_node_features, hidden_dim))
+
+    
         for _ in range(num_layers - 1):
             self.convs.append(pyg_nn.GCNConv(hidden_dim, hidden_dim))
 
-        self.fc = torch.nn.Linear(hidden_dim, num_classes)
+        self.fc = torch.nn.Linear(hidden_dim, hidden_dim)
+        self.fc2 = torch.nn.Linear(hidden_dim, num_classes)
 
     def forward(self, x, edge_index, batch):
+        x = self.fc_before(x)
+        x = self.fc_before_relu(x)
         for conv in self.convs:
             x = x.float()
             edge_index = edge_index.long()
@@ -38,9 +54,16 @@ class LetterGNN(torch.nn.Module):
 
         # classify
         x = self.fc(x)
+        x = F.relu(x)
+        x = self.fc2(x)
 
         return x
 
+    def df_summary(self):
+        cols = ["use_fc_before", "fc_after_conv", "hidden_dim", "num_conv_layers", "node_features"]
+        vals= [(1, 2, self.fc.out_features, len(self.convs), self.num_featues)]
+
+        return pd.DataFrame(vals, columns=cols)
 
 class SimpleGraphDataset(InMemoryDataset):
     def __init__(self, data_list):
@@ -58,7 +81,7 @@ class SimpleGraphDataset(InMemoryDataset):
 
 def train(database_path: str, user_id: str, model_path='', mode=LoadMode.ONE_HOT,
           test_train_split=0.2, hidden_dim=128, epochs_num=1000,
-          rows_per_example=50, positive_negative_ratio=0.5, offset=10) -> float:
+          rows_per_example=50, positive_negative_ratio=0.5, offset=10, num_layers=2, use_fc_before=True) -> float:
     """
     Train and save the model
     :param database_path: Path to database with key presses
@@ -125,7 +148,7 @@ def train(database_path: str, user_id: str, model_path='', mode=LoadMode.ONE_HOT
 
 
     model = LetterGNN(num_node_features=train_examples.num_node_features, hidden_dim=hidden_dim,
-                      num_classes=train_examples.num_classes).to(device)
+                      num_classes=train_examples.num_classes, num_layers=num_layers, use_fc_before=use_fc_before).to(device)
     optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
     criterion = torch.nn.CrossEntropyLoss()
 
@@ -172,10 +195,27 @@ def train(database_path: str, user_id: str, model_path='', mode=LoadMode.ONE_HOT
 
 def train_with_crossvalidation(database_path: str, user_id: str, model_path='', mode=LoadMode.ONE_HOT,
           test_train_split=0.2, hidden_dim=128, epochs_num=1000,
-          rows_per_example=50, positive_negative_ratio=0.5, offset=10) -> float:
+          rows_per_example=50, positive_negative_ratio=0.5, offset=10, num_layers=2, use_fc_before=True) -> list[tuple[float, float, float]]:
     """
-    copy of the above func just training the model multiple times and performing cross validation
+    Train the model and test it's performance using cross validation 
+    :param database_path: Path to database with key presses
+    :param user_id: user_id for positive labels
+    :param model_path: Path to save the model. Leave default to save at ./model/<user_id>.pth
+    :param mode: Mode for processing node attributes
+    :param test_train_split: test to all examples proportion, set 0 for training only
+    :param hidden_dim: hidden dimension
+    :param epochs_num: number of epochs for training loop
+    :param rows_per_example: number of key presses per example
+    :param positive_negative_ratio: positive to negative class ratio, set 0 to load all examples,
+        but take care of class imbalance.
+    :param offset: Number of rows between beginning of each example
+        for each of the cross validation f 
+    :returns list of tuple of (precision, recall, f1 score)
     """
+    results = []
+    models = []
+    model_summary=None
+
 
     def lower_upper_split(lower, upper, l, skip_boundry):
         from math import floor
@@ -198,7 +238,7 @@ def train_with_crossvalidation(database_path: str, user_id: str, model_path='', 
 
     examples_pos, examples_neg_list = load_from_db(
         database_path=database_path, user_id=user_id, positive_negative_ratio=positive_negative_ratio,
-        mode=mode, rows_per_example=rows_per_example, offset=1
+        mode=mode, rows_per_example=rows_per_example, offset=offset
     )
 
     k = 1/test_train_split
@@ -209,6 +249,12 @@ def train_with_crossvalidation(database_path: str, user_id: str, model_path='', 
     for lower,upper in zip(lowers, uppers):
 
         if test_train_split > 0.0:
+            train_pos, test_pos = lower_upper_split(lower, upper, examples_pos, rows_per_example)
+
+            tr_limit = len(train_pos)//len(examples_neg_list)
+            ts_limit = len(test_pos)//len(examples_neg_list)
+
+            
             train_neg = []
             test_neg = []
             for examples_neg in examples_neg_list:
@@ -218,11 +264,8 @@ def train_with_crossvalidation(database_path: str, user_id: str, model_path='', 
                 # take lower split of data from 
                 tr, ts = lower_upper_split(lower, upper, examples_neg, rows_per_example)
 
-                train_neg.extend(tr)
-                test_neg.extend(ts)
-
-
-            train_pos, test_pos = lower_upper_split(lower, upper, examples_pos, rows_per_example)
+                train_neg.extend(tr[:tr_limit])
+                test_neg.extend(ts[:ts_limit])
             
 
             train_examples = train_pos + train_neg
@@ -243,7 +286,8 @@ def train_with_crossvalidation(database_path: str, user_id: str, model_path='', 
 
 
         model = LetterGNN(num_node_features=train_examples.num_node_features, hidden_dim=hidden_dim,
-                        num_classes=train_examples.num_classes).to(device)
+                        num_classes=train_examples.num_classes, use_fc_before=use_fc_before, num_layers=num_layers).to(device)
+        model_summary = model.df_summary()
         optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
         criterion = torch.nn.CrossEntropyLoss()
 
@@ -263,17 +307,6 @@ def train_with_crossvalidation(database_path: str, user_id: str, model_path='', 
                 total_loss += loss.item()
             loss = total_loss / len(data_loader)
 
-            # # Validate the model
-            # model.eval()
-            # validate_loader = torchLoader.DataLoader(validate_examples, batch_size=1, shuffle=False)
-            # validate_preds = []
-            # validate_bases = []
-            # for data in validate_loader:
-            #     output = model(data.x, data.edge_index, data.batch)
-            #     pred = output.argmax(dim=1)
-            #     validate_bases.append(data.y[0].item())
-            #     validate_preds.append(pred[0].item())
-            # validate_precision = precision_score(validate_bases, validate_preds)
             if loss < smallest_loss:
                 smallest_loss = loss
                 best_model = model.state_dict()
@@ -284,6 +317,7 @@ def train_with_crossvalidation(database_path: str, user_id: str, model_path='', 
                 print(f"Epoch: {epoch:03d}, Loss: {loss:.4f}")
                 break
 
+        models.append(best_model)
         torch.save(best_model, model_path)
 
         if len(test_examples):
@@ -297,19 +331,23 @@ def train_with_crossvalidation(database_path: str, user_id: str, model_path='', 
                 bases.append(data.y[0].item())
                 preds.append(pred[0].item())
 
-            # precision = precision_score(bases, preds)
-            # recall = recall_score(bases, preds)
-            # f1 = f1_score(bases, preds)
-            tp = sum((p == 1 and b == 1) for p, b in zip(preds, bases))
-            fp = sum((p == 1 and b == 0) for p, b in zip(preds, bases))
-            tn = sum((p == 0 and b == 0) for p, b in zip(preds, bases))
-            fn = sum((p == 0 and b == 1) for p, b in zip(preds, bases))
+            precision = precision_score(bases, preds)
+            recall = recall_score(bases, preds)
+            f1 = f1_score(bases, preds)
 
-            print(f"TP: {tp}, FP: {fp}, TN: {tn}, FN: {fn}")
-            with open(f"dupa_{user_id}.txt", "a") as f:
-                f.write(f"TP: {tp}, FP: {fp}, TN: {tn}, FN: {fn}\n")
+            # tp = sum((p == 1 and b == 1) for p, b in zip(preds, bases))
+            # fp = sum((p == 1 and b == 0) for p, b in zip(preds, bases))
+            # tn = sum((p == 0 and b == 0) for p, b in zip(preds, bases))
+            # fn = sum((p == 0 and b == 1) for p, b in zip(preds, bases))
+            print(f"Prec {precision:.4f}, recall {recall:.4f}")
+            results.append((precision, recall, f1))
 
-    return 0.0
+    # get index of result with highest f1 score, and save corresponding model
+    # i have no idea if this will ever be useful but since we have the models we might as well save one 
+    i = results.index(max(results, key=lambda x: x[2]))
+    torch.save(models[i], model_path)
+
+    return results, model_summary
    
 
 if __name__ == '__main__':
@@ -317,10 +355,10 @@ if __name__ == '__main__':
     if len(sys.argv) > 1:
         user = sys.argv[1]
 
-    for dims in [256]:
-        for mode in [LoadMode.ONE_HOT, LoadMode.DROP]:
-            for row_per_example in [35, 40, 50]:
-                with open(f"dupa_{user}.txt", "a") as f:
+    for dims in [128]:
+        for mode in [LoadMode.ONE_HOT]:
+            for row_per_example in [50, 40, 70]:
+                with open(f"ff_before_conv{user}.txt", "a") as f:
                     f.write(f"dims: {dims}, rows: {row_per_example}, mode: {str(mode)}\n")
 
                 train_with_crossvalidation("../keystroke_data.sqlite", user,
