@@ -240,7 +240,7 @@ def train_with_crossvalidation(database_path: str, user_id: int, model_path='', 
         mode=mode, rows_per_example=rows_per_example, offset=offset
     )
 
-    k = 1//test_train_split
+    k = int(1/test_train_split)
     # choose the part of the dataset that will be user for testing
     lowers = [(1/k)*i for i in range(k)] 
     uppers = [(1/k)*(i+1) for i in range(k)] 
