@@ -4,7 +4,7 @@ import pandas as pd
 import train
 
 
-def run_single_benchmark(user, benchmark_file_path):
+def run_single_benchmark(user:int, benchmark_file_path):
     """"
     workflow goes like this:
         A model will be trained for a specified user using cross validation, the results will be written to an intermediate file?
@@ -42,4 +42,4 @@ def run_single_benchmark(user, benchmark_file_path):
 
 if __name__ == '__main__':
     user_num = sys.argv[1]
-    run_single_benchmark(f"key_presses_{user_num}", f"key_presses_{user_num}.csv")
+    run_single_benchmark(int(user_num), f"key_presses_{user_num}.csv")

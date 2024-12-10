@@ -331,7 +331,7 @@ def load_from_str(content: str, y: torch.tensor, mode=LoadMode.ONE_HOT, rows_per
     return [create_data_obj(df, edges, y=y, mode=mode) for df, edges in zip(df_list, edges_list)]
 
 
-def get_user_examples(conn: sqlite3.Connection, user_id: str, y: torch.tensor, 
+def get_user_examples(conn: sqlite3.Connection, user_id: int, y: torch.tensor, 
                       mode=LoadMode.ONE_HOT, rows_per_example=50, offset=10, agg_time=True) -> List[Data]:
     """
     Loads and processes data from a database to generate a list of PyTorch Geometric `Data` objects.
@@ -382,7 +382,7 @@ def get_user_examples(conn: sqlite3.Connection, user_id: str, y: torch.tensor,
         return [create_data_obj_extra_feature(df, edges, y=torch.tensor(y), mode=mode, mat=extra_feature_matrix) for df, edges in zip(df_list, edges_list)]
 
 
-def load_from_db(database_path: str, user_id: str, positive_negative_ratio: float,
+def load_from_db(database_path: str, user_id: int, positive_negative_ratio: float,
                  mode=LoadMode.ONE_HOT, rows_per_example=50, offset=10) -> Tuple[List[Data], List[List[Data]]]:
     """
     Loads and processes data from a database to generate a list of PyTorch Geometric `Data` objects.

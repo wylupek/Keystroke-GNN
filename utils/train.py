@@ -81,7 +81,7 @@ class SimpleGraphDataset(InMemoryDataset):
 
 def train(database_path: str, user_id: str, model_path='', mode=LoadMode.ONE_HOT,
           test_train_split=0.2, hidden_dim=128, epochs_num=1000,
-          rows_per_example=50, positive_negative_ratio=0.5, offset=10, num_layers=2, use_fc_before=True) -> float:
+          rows_per_example=50, positive_negative_ratio=0.5, offset=1, num_layers=2, use_fc_before=True) -> float:
     """
     Train and save the model
     :param database_path: Path to database with key presses
@@ -193,9 +193,9 @@ def train(database_path: str, user_id: str, model_path='', mode=LoadMode.ONE_HOT
     return 0.0
 
 
-def train_with_crossvalidation(database_path: str, user_id: str, model_path='', mode=LoadMode.ONE_HOT,
+def train_with_crossvalidation(database_path: str, user_id: int, model_path='', mode=LoadMode.ONE_HOT,
           test_train_split=0.2, hidden_dim=128, epochs_num=1000,
-          rows_per_example=50, positive_negative_ratio=0.5, offset=10, num_layers=2, use_fc_before=True) -> list[tuple[float, float, float]]:
+          rows_per_example=50, positive_negative_ratio=0.5, offset=1, num_layers=2, use_fc_before=True) -> list[tuple[float, float, float]]:
     """
     Train the model and test it's performance using cross validation 
     :param database_path: Path to database with key presses
@@ -215,7 +215,6 @@ def train_with_crossvalidation(database_path: str, user_id: str, model_path='', 
     results = []
     models = []
     model_summary=None
-
 
     def lower_upper_split(lower, upper, l, skip_boundry):
         from math import floor
@@ -241,10 +240,10 @@ def train_with_crossvalidation(database_path: str, user_id: str, model_path='', 
         mode=mode, rows_per_example=rows_per_example, offset=offset
     )
 
-    k = 1/test_train_split
+    k = 1//test_train_split
     # choose the part of the dataset that will be user for testing
-    lowers = [(1/k)*i for i in range(5)] 
-    uppers = [(1/k)*(i+1) for i in range(5)] 
+    lowers = [(1/k)*i for i in range(k)] 
+    uppers = [(1/k)*(i+1) for i in range(k)] 
     
     for lower,upper in zip(lowers, uppers):
 
@@ -351,17 +350,7 @@ def train_with_crossvalidation(database_path: str, user_id: str, model_path='', 
    
 
 if __name__ == '__main__':
-    user = "user2"
-    if len(sys.argv) > 1:
-        user = sys.argv[1]
 
-    for dims in [128]:
-        for mode in [LoadMode.ONE_HOT]:
-            for row_per_example in [50, 40, 70]:
-                with open(f"ff_before_conv{user}.txt", "a") as f:
-                    f.write(f"dims: {dims}, rows: {row_per_example}, mode: {str(mode)}\n")
-
-                train_with_crossvalidation("../keystroke_data.sqlite", user,
-                    model_path='../models/test.pth', test_train_split=0.2, positive_negative_ratio=1,
-                    mode=mode, epochs_num=500, hidden_dim=dims, rows_per_example=row_per_example)
-
+    res, _ = train_with_crossvalidation("../keystroke_data.sqlite", user_id=60,
+        model_path='../models/test.pth', test_train_split=0.1, positive_negative_ratio=1,
+        mode=LoadMode.ONE_HOT, epochs_num=500, hidden_dim=256, rows_per_example=50, use_fc_before=True)
