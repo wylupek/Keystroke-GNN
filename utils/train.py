@@ -80,7 +80,7 @@ class SimpleGraphDataset(InMemoryDataset):
 
 
 def train(database_path: str, user_id: str, model_path='', mode=LoadMode.ONE_HOT,
-          test_train_split=0.2, hidden_dim=128, epochs_num=1000,
+          test_train_split=0.2, hidden_conv_dim=64, hidden_ff_dim=256, epochs_num=1000,
           rows_per_example=50, positive_negative_ratio=0.5, offset=1, num_layers=2, use_fc_before=True) -> float:
     """
     Train and save the model
@@ -147,8 +147,8 @@ def train(database_path: str, user_id: str, model_path='', mode=LoadMode.ONE_HOT
         print("Train dataset statistics: ", train_examples.statistics())
 
 
-    model = LetterGNN(num_node_features=train_examples.num_node_features, hidden_dim=hidden_dim,
-                      num_classes=train_examples.num_classes, num_layers=num_layers, use_fc_before=use_fc_before).to(device)
+    model = LetterGNN(num_node_features=train_examples.num_node_features, hidden_conv_dim=hidden_conv_dim, hidden_ff_dim=hidden_ff_dim,
+                        num_classes=train_examples.num_classes, use_fc_before=use_fc_before, num_layers=num_layers).to(device)
     optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
     criterion = torch.nn.CrossEntropyLoss()
 
