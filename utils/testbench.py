@@ -10,26 +10,29 @@ def run_single_benchmark(user:int, benchmark_file_path):
         A model will be trained for a specified user using cross validation, the results will be written to an intermediate file?
     """
     kwargs = {
-        "mode": train.LoadMode.ONE_HOT,
-        "epochs_num": 500,
+        "mode": train.LoadMode.MOST_COMMON_ONLY,
+        "epochs_num": 700,
         "rows_per_example": 50,
-        "hidden_dim": 128,
+        "hidden_conv_dim" :64, 
+        "hidden_ff_dim": 128,
         "user_id": user,
         "num_layers": 2,
-        "use_fc_before": False
+        "use_fc_before": True
     }
 
     args = pd.DataFrame([kwargs])
 
     l, model_summary_df = train.train_with_crossvalidation(
-        "../keystroke_data.sqlite", model_path='../models/test.pth', test_train_split=0.2, positive_negative_ratio=1, offset=1,
+        "../keystroke_data.sqlite", model_path='../models/test.pth', test_train_split=0.1, positive_negative_ratio=1, offset=1,
             **kwargs)
 
 
     # aggregate the precission and recall
     precision = sum([i[0] for i in l])/len(l)
     recall = sum([i[1] for i in l])/len(l)
-    df2 = pd.DataFrame([(precision, recall)], columns=["precision", "recall"])
+    min_prec = min([i[0] for i in l])
+    min_recall = min([i[1] for i in l])
+    df2 = pd.DataFrame([(precision, recall, min_prec, min_recall)], columns=["precision", "recall", "min_prec", "min_recall"])
 
     
     full_report_df = pd.concat([args, model_summary_df, df2], axis=1)
@@ -41,5 +44,6 @@ def run_single_benchmark(user:int, benchmark_file_path):
 
 
 if __name__ == '__main__':
-    user_num = sys.argv[1]
-    run_single_benchmark(int(user_num), f"key_presses_{user_num}.csv")
+    user = int(sys.argv[1])
+    # for user in [60]:
+    run_single_benchmark(user, f"user{user}.csv")

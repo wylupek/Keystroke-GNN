@@ -276,3 +276,21 @@ def char_to_enum(char):
 
 def char_to_enum_value(char):
     return char_to_enum(char).value
+
+char_frequency = {
+    'SP': 2756, 'DEL': 2036, 'e': 1279, 'a': 1262, 'i': 1109, 'o': 1064, 'n': 691, 'z': 683, 's': 636, 't': 627,
+    'y': 519, 'm': 503, 'r': 495, 'l': 480, 'c': 460, 'k': 427, 'w': 418, 'd': 415, 'u': 344, 'p': 320, 'j': 317,
+    'b': 266, 'h': 254, '.': 204, 'g': 191, ',': 117, 'f': 78, 'ł': 61, 'v': 50, 'ż': 36, 'x': 36, 'I': 32, 
+    'ą': 30, 'M': 29, 'è': 27, 'NL': 26, 'W': 25, 'T': 24, 'ę': 23, 'ć': 23, 'ó': 18, 'N': 17, '?': 17, 'P': 15,
+    'A': 15, '!': 15, 'ś': 14, 'H': 14, 'D': 14, 'B': 11, '(': 11, 'AP': 10, '1': 10, ')': 10, 'O': 9, 'R': 8,
+    'q': 7, 'E': 7, 'C': 7, 'ź': 6, 'ń': 6, 'QM': 6, 'S': 5, 'J': 5, 'Z': 4, 'Y': 4, 'G': 4, ':': 4, '3': 4, 
+    'F': 3, '8': 3, '6': 3, '5': 3, '0': 3, 'U': 2, '9': 2, '{': 1, 'V': 1, 'K': 1, 'DS': 1, '7': 1, '2': 1, 
+    '-': 1, '#': 1
+}
+
+# nobody wrote a pipe
+weird_char_coded = Alphabet.PIPE.value 
+def char_to_enum_value_without_uncommon(char, cutoff=10):
+    if char_frequency.get(char, 0) <= cutoff:
+        return weird_char_coded 
+    return char_to_enum(char).value

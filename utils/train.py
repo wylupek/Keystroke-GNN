@@ -17,7 +17,7 @@ from sklearn.metrics import precision_score, recall_score, f1_score
 
 # Define a simple GCN model
 class LetterGNN(torch.nn.Module):
-    def __init__(self, num_node_features, hidden_dim, num_classes, num_layers, use_fc_before):
+    def __init__(self, num_node_features, hidden_conv_dim, hidden_ff_dim, num_classes, num_layers, use_fc_before):
         super(LetterGNN, self).__init__()
 
         # self for later
@@ -25,20 +25,20 @@ class LetterGNN(torch.nn.Module):
 
         self.convs = torch.nn.ModuleList()
         if use_fc_before:
-            self.fc_before = torch.nn.Linear(num_node_features, hidden_dim)
+            self.fc_before = torch.nn.Linear(num_node_features, hidden_ff_dim)
             self.fc_before_relu = F.relu
-            self.convs.append(pyg_nn.GCNConv(hidden_dim, hidden_dim))
+            self.convs.append(pyg_nn.GCNConv(hidden_ff_dim, hidden_conv_dim))
         else:
             self.fc_before = torch.nn.Identity()
             self.fc_before_relu = torch.nn.Identity()
-            self.convs.append(pyg_nn.GCNConv(num_node_features, hidden_dim))
+            self.convs.append(pyg_nn.GCNConv(num_node_features, hidden_conv_dim))
 
     
         for _ in range(num_layers - 1):
-            self.convs.append(pyg_nn.GCNConv(hidden_dim, hidden_dim))
+            self.convs.append(pyg_nn.GCNConv(hidden_conv_dim, hidden_conv_dim))
 
-        self.fc = torch.nn.Linear(hidden_dim, hidden_dim)
-        self.fc2 = torch.nn.Linear(hidden_dim, num_classes)
+        self.fc = torch.nn.Linear(hidden_conv_dim, hidden_ff_dim)
+        self.fc2 = torch.nn.Linear(hidden_ff_dim, num_classes)
 
     def forward(self, x, edge_index, batch):
         x = self.fc_before(x)
@@ -194,7 +194,7 @@ def train(database_path: str, user_id: str, model_path='', mode=LoadMode.ONE_HOT
 
 
 def train_with_crossvalidation(database_path: str, user_id: int, model_path='', mode=LoadMode.ONE_HOT,
-          test_train_split=0.2, hidden_dim=128, epochs_num=1000,
+          test_train_split=0.2, hidden_conv_dim=64, hidden_ff_dim=256, epochs_num=1000,
           rows_per_example=50, positive_negative_ratio=0.5, offset=1, num_layers=2, use_fc_before=True) -> list[tuple[float, float, float]]:
     """
     Train the model and test it's performance using cross validation 
@@ -284,7 +284,7 @@ def train_with_crossvalidation(database_path: str, user_id: int, model_path='', 
             print("Train dataset statistics: ", train_examples.statistics())
 
 
-        model = LetterGNN(num_node_features=train_examples.num_node_features, hidden_dim=hidden_dim,
+        model = LetterGNN(num_node_features=train_examples.num_node_features, hidden_conv_dim=hidden_conv_dim, hidden_ff_dim=hidden_ff_dim,
                         num_classes=train_examples.num_classes, use_fc_before=use_fc_before, num_layers=num_layers).to(device)
         model_summary = model.df_summary()
         optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
