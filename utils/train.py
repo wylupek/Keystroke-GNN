@@ -108,6 +108,16 @@ def train(database_path: str, user_id: str, model_path='', mode=LoadMode.ONE_HOT
     )
 
     if test_train_split > 0.0:
+        train_pos = examples_pos[
+            0:round((1-test_train_split)*len(examples_pos)) - rows_per_example
+        ]
+        test_pos = examples_pos[
+            round((1-test_train_split)*len(examples_pos)):
+        ]
+
+        tr_limit = len(train_pos)//len(examples_neg_list)
+        ts_limit = len(test_pos)//len(examples_neg_list)
+
         train_neg = []
         test_neg = []
         for examples_neg in examples_neg_list:
@@ -119,15 +129,12 @@ def train(database_path: str, user_id: str, model_path='', mode=LoadMode.ONE_HOT
             ts = examples_neg[
                 round((1-test_train_split)*len(examples_neg)):
             ]
-            train_neg.extend(tr)
-            test_neg.extend(ts)
+            train_neg.extend(tr[:tr_limit])
+            test_neg.extend(ts[:ts_limit])
 
-        train_pos = examples_pos[
-            0:round((1-test_train_split)*len(examples_pos)) - rows_per_example
-        ]
-        test_pos = examples_pos[
-            round((1-test_train_split)*len(examples_pos)):
-        ]
+
+        
+
         
         train_examples = train_pos + train_neg
         test_examples = test_pos + test_neg
@@ -352,7 +359,20 @@ def train_with_crossvalidation(database_path: str, user_id: int, model_path='', 
    
 
 if __name__ == '__main__':
+    user = int(sys.argv[1])
 
-    res, _ = train_with_crossvalidation("../keystroke_data.sqlite", user_id=60,
-        model_path='../models/test.pth', test_train_split=0.1, positive_negative_ratio=1,
-        mode=LoadMode.ONE_HOT, epochs_num=500, hidden_dim=256, rows_per_example=50, use_fc_before=True)
+
+    kwargs = {
+        "mode": LoadMode.MOST_COMMON_ONLY,
+        "epochs_num": 700,
+        "rows_per_example": 50,
+        "hidden_conv_dim" :64, 
+        "hidden_ff_dim": 128,
+        "user_id": user,
+        "num_layers": 2,
+        "use_fc_before": True
+    }
+
+    train("../keystroke_data.sqlite", model_path=f"../models/{user}.pth", test_train_split=0, positive_negative_ratio=1, offset=1,
+            **kwargs)
+    

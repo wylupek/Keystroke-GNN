@@ -21,10 +21,20 @@ class LoadMode(Enum):
     `load_char_mode.ONE_HOT`: Encodes the key column as a one-hot vector and concatenates
         it with other features.
     """
-    DROP = 0,
-    INT = 1,
+    DROP = 0
+    INT = 1
     ONE_HOT = 2
+    MOST_COMMON_ONLY = 3
+    SMALL_ALPHABET = 4
+    ACCENT_AND_CAPITAL_FLAG = 5
 
+def getAlphabetSize(mode):
+    if mode == LoadMode.SMALL_ALPHABET:
+        return letter_encoding.small_alphabet_size
+    elif mode == LoadMode.ACCENT_AND_CAPITAL_FLAG:
+        return letter_encoding.thirdAlphabetSize
+    else:
+        return letter_encoding.AlphabetSize
 
 def create_data_obj(df: pd.DataFrame, edges: list, y: torch.tensor, mode=LoadMode.ONE_HOT, use_accel=False) -> Data:
     """
@@ -45,17 +55,30 @@ def create_data_obj(df: pd.DataFrame, edges: list, y: torch.tensor, mode=LoadMod
         - `edge_index`: Edge indices tensor of shape [2, num_edges].
         - `y`: tensor(y).
     """
+    if mode != LoadMode.ACCENT_AND_CAPITAL_FLAG:
+        df = df.drop(columns=["cap", "acc"])
 
     edge_index = torch.tensor(edges, dtype=torch.long)
     if not use_accel:
         df = df.drop(columns=['accel_x', 'accel_y', 'accel_z'])
 
-    if mode == LoadMode.ONE_HOT:
+    if mode in [ LoadMode.ONE_HOT, LoadMode.MOST_COMMON_ONLY, LoadMode.SMALL_ALPHABET ]:
         keys = df["key"].to_list()
         key_tensor = torch.tensor(keys, dtype=torch.long)
-        one_hot_keys = oh(key_tensor, num_classes=letter_encoding.AlphabetSize)
+        print(mode, keys, getAlphabetSize(mode))
+        one_hot_keys = oh(key_tensor, num_classes=getAlphabetSize(mode))
         features = torch.from_numpy(df.drop(columns=["key"]).values)
         node_attributes = torch.cat((features, one_hot_keys), dim=1).float()
+    elif mode == LoadMode.ACCENT_AND_CAPITAL_FLAG:
+        keys = df["key"].to_list()
+        key_tensor = torch.tensor(keys, dtype=torch.long)
+        print(mode, keys, getAlphabetSize(mode))
+        one_hot_keys = oh(key_tensor, num_classes=getAlphabetSize(mode))
+        is_acc = torch.tensor(df["acc"].to_list()).unsqueeze(1)  
+        is_cap = torch.tensor(df["cap"].to_list()).unsqueeze(1)  
+
+        features = torch.from_numpy(df.drop(columns=["key", "acc", "cap"]).values)
+        node_attributes = torch.cat((features, one_hot_keys, is_acc, is_cap), dim=1).float()
     elif mode == LoadMode.DROP:
         node_attributes = torch.from_numpy(df.drop(columns=["key"]).values).float()
     else: # mode == LoadMode.INT:
@@ -88,10 +111,10 @@ def create_data_obj_extra_feature(df: pd.DataFrame, edges: list, y: torch.tensor
     if not use_accel:
         df = df.drop(columns=['accel_x', 'accel_y', 'accel_z'])
 
-    if mode == LoadMode.ONE_HOT:
+    if mode == LoadMode.ONE_HOT or LoadMode.SMALL_ALPHABET:
         keys = df["key"].to_list()
         key_tensor = torch.tensor(keys, dtype=torch.long)
-        one_hot_keys = oh(key_tensor, num_classes=letter_encoding.AlphabetSize)
+        one_hot_keys = oh(key_tensor, num_classes=getAlphabetSize(mode))
         
         input_rows = []
         for i, key in enumerate(keys):
@@ -120,7 +143,7 @@ def create_data_obj_extra_feature(df: pd.DataFrame, edges: list, y: torch.tensor
     return Data(x=node_attributes, edge_index=edge_index, y=y)
 
 
-def process_df(df: pd.DataFrame) -> Tuple[pd.DataFrame, List[List[int]]]:
+def process_df(df: pd.DataFrame, char_to_value_map) -> Tuple[pd.DataFrame, List[List[int]]]:
     """
     Processes a DataFrame to compute average durations before and after key events,
     calculates mean values for grouped accelerometer data, and maps keys to vertex indices.
@@ -178,14 +201,16 @@ def process_df(df: pd.DataFrame) -> Tuple[pd.DataFrame, List[List[int]]]:
     edge_endings = [df.index[df["key"] == c][0] for c in key_pairs[1]]
 
     # now encode key as from letter_encoding (as int value, not python enum object)
-    df["key"] = df["key"].apply(lambda x: letter_encoding.char_to_enum_value(x))
+    df["acc"] = df["key"].apply(lambda x: letter_encoding.has_accent(x))
+    df["cap"] = df["key"].apply(lambda x: letter_encoding.is_capitalized(x))
+    df["key"] = df["key"].apply(lambda x: char_to_value_map(x))
 
     # print(df, [edge_beginnings, edge_endings])
     return df, [edge_beginnings, edge_endings]
 
 
 
-def process_df_with_per_letter_average(df: pd.DataFrame) -> Tuple[pd.DataFrame, List[List[int]]]:
+def process_df_with_per_letter_average(df: pd.DataFrame, alphabet_size) -> Tuple[pd.DataFrame, List[List[int]]]:
     """
     Processes a DataFrame to compute average durations before and after key events 
     for each letter separately, filling with zero otherwise,
@@ -242,7 +267,7 @@ def process_df_with_per_letter_average(df: pd.DataFrame) -> Tuple[pd.DataFrame, 
     df = df[["key", "accel_x","accel_y","accel_z"]].groupby("key").mean().reset_index()
 
     # deepest each column is time before, time after
-    times_matrix = torch.zeros([letter_encoding.AlphabetSize, letter_encoding.AlphabetSize, 2])
+    times_matrix = torch.zeros([getAlphabetSize(alphabet_size), getAlphabetSize(alphabet_size), 2])
 
     for ((letter_before, letter_after), (dur_sum, dur_count)) in avg_duration.items():
         before_encoded = letter_encoding.char_to_enum_value(letter_before)
@@ -265,7 +290,7 @@ def process_df_with_per_letter_average(df: pd.DataFrame) -> Tuple[pd.DataFrame, 
     return df, [edge_beginnings, edge_endings], (times_matrix)
 
 
-def load_from_file(filepath: str, y: torch.tensor, mode=LoadMode.ONE_HOT, rows_per_example=50, offset=10) -> List[Data]:
+def load_from_file(filepath: str, y: int, mode=LoadMode.ONE_HOT, rows_per_example=50, offset=10, agg_time=True) -> List[Data]:
     """
     Loads and processes data from a file to generate a list of PyTorch Geometric `Data` objects.
     :param filepath: str: Path to the input .tsv file
@@ -283,6 +308,15 @@ def load_from_file(filepath: str, y: torch.tensor, mode=LoadMode.ONE_HOT, rows_p
             - `edge_index`: Edge indices tensor of shape [2, num_edges].
             - `y`: Data owner label
     """
+    char_map_func = letter_encoding.char_to_enum_value
+    if mode == LoadMode.MOST_COMMON_ONLY:
+        char_map_func = letter_encoding.char_to_enum_value_without_uncommon
+    elif mode == LoadMode.SMALL_ALPHABET:
+        char_map_func = letter_encoding.char_to_enum_value_small_alphabet
+    elif mode == LoadMode.ACCENT_AND_CAPITAL_FLAG:
+        char_map_func = letter_encoding.char_to_enum_value_no_acc_cap
+
+
     unprocessed = pd.read_csv(filepath, sep="\t", encoding='utf-8', quoting=csv.QUOTE_NONE)
 
     df_list = []
@@ -290,15 +324,22 @@ def load_from_file(filepath: str, y: torch.tensor, mode=LoadMode.ONE_HOT, rows_p
 
     i = 0
     while i + rows_per_example <= len(unprocessed):
-        d, e = process_df(unprocessed.iloc[i : i + rows_per_example])
+        if agg_time:
+            d, e = process_df(unprocessed.iloc[i : i + rows_per_example], char_map_func)
+        else:
+            d, e, extra_feature_matrix = process_df_with_per_letter_average(unprocessed.iloc[i : i + rows_per_example], alphabet_size=getAlphabetSize(mode))
         df_list.append(d)
         edges_list.append(e)
         i += offset
 
-    return [create_data_obj(df, edges, y=y, mode=mode) for df, edges in zip(df_list, edges_list)]
+    if agg_time:
+        return [create_data_obj(df, edges, y=torch.tensor(y), mode=mode) for df, edges in zip(df_list, edges_list)]
+
+    else:
+        return [create_data_obj_extra_feature(df, edges, y=torch.tensor(y), mode=mode, mat=extra_feature_matrix) for df, edges in zip(df_list, edges_list)]
 
 
-def load_from_str(content: str, y: torch.tensor, mode=LoadMode.ONE_HOT, rows_per_example=50, offset=10) -> List[Data]:
+def load_from_str(content: str, y: int, mode=LoadMode.ONE_HOT, rows_per_example=50, offset=10, agg_time=True) -> List[Data]:
     """
     Loads and processes data from a string to generate a list of PyTorch Geometric `Data` objects.
     :param content: str: string with .tsv content
@@ -316,6 +357,15 @@ def load_from_str(content: str, y: torch.tensor, mode=LoadMode.ONE_HOT, rows_per
             - `edge_index`: Edge indices tensor of shape [2, num_edges].
             - `y`: Data owner label
     """
+    char_map_func = letter_encoding.char_to_enum_value
+    if mode == LoadMode.MOST_COMMON_ONLY:
+        char_map_func = letter_encoding.char_to_enum_value_without_uncommon
+    elif mode == LoadMode.SMALL_ALPHABET:
+        char_map_func = letter_encoding.char_to_enum_value_small_alphabet
+    elif mode == LoadMode.ACCENT_AND_CAPITAL_FLAG:
+        char_map_func = letter_encoding.char_to_enum_value_no_acc_cap
+
+
     unprocessed = pd.read_csv(StringIO(content), sep="\t", encoding='utf-8', quoting=csv.QUOTE_NONE)
 
     df_list = []
@@ -323,12 +373,19 @@ def load_from_str(content: str, y: torch.tensor, mode=LoadMode.ONE_HOT, rows_per
 
     i = 0
     while i + rows_per_example <= len(unprocessed):
-        d, e = process_df(unprocessed.iloc[i : i + rows_per_example])
+        if agg_time:
+            d, e = process_df(unprocessed.iloc[i : i + rows_per_example], char_map_func)
+        else:
+            d, e, extra_feature_matrix = process_df_with_per_letter_average(unprocessed.iloc[i : i + rows_per_example], alphabet_size=getAlphabetSize(mode))
         df_list.append(d)
         edges_list.append(e)
         i += offset
 
-    return [create_data_obj(df, edges, y=y, mode=mode) for df, edges in zip(df_list, edges_list)]
+    if agg_time:
+        return [create_data_obj(df, edges, y=torch.tensor(y), mode=mode) for df, edges in zip(df_list, edges_list)]
+
+    else:
+        return [create_data_obj_extra_feature(df, edges, y=torch.tensor(y), mode=mode, mat=extra_feature_matrix) for df, edges in zip(df_list, edges_list)]
 
 
 def get_user_examples(conn: sqlite3.Connection, user_id: int, y: torch.tensor, 
@@ -349,6 +406,14 @@ def get_user_examples(conn: sqlite3.Connection, user_id: int, y: torch.tensor,
             - `edge_index`: Edge indices tensor of shape [2, num_edges].
             - `y`: tensor(y).
     """
+    char_map_func = letter_encoding.char_to_enum_value
+    if mode == LoadMode.MOST_COMMON_ONLY:
+        char_map_func = letter_encoding.char_to_enum_value_without_uncommon
+    elif mode == LoadMode.SMALL_ALPHABET:
+        char_map_func = letter_encoding.char_to_enum_value_small_alphabet
+    elif mode == LoadMode.ACCENT_AND_CAPITAL_FLAG:
+        char_map_func = letter_encoding.char_to_enum_value_no_acc_cap
+
     cursor = conn.cursor()
     cursor.execute("""
         SELECT * FROM key_press
@@ -365,9 +430,9 @@ def get_user_examples(conn: sqlite3.Connection, user_id: int, y: torch.tensor,
         if rows.iloc[i]['timestamp'] == rows.iloc[i + rows_per_example - 1]['timestamp']:
             # print(f"{user_id} [{i} : {i + rows_per_example}]")
             if agg_time:
-                d, e = process_df(rows.iloc[i : i + rows_per_example])
+                d, e = process_df(rows.iloc[i : i + rows_per_example], char_map_func)
             else:
-                d, e, extra_feature_matrix = process_df_with_per_letter_average(rows.iloc[i : i + rows_per_example])
+                d, e, extra_feature_matrix = process_df_with_per_letter_average(rows.iloc[i : i + rows_per_example], alphabet_size=getAlphabetSize(mode))
 
             df_list.append(d)
             edges_list.append(e)

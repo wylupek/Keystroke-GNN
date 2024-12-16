@@ -10,7 +10,7 @@ def run_single_benchmark(user:int, benchmark_file_path):
         A model will be trained for a specified user using cross validation, the results will be written to an intermediate file?
     """
     kwargs = {
-        "mode": train.LoadMode.MOST_COMMON_ONLY,
+        "mode": train.LoadMode.ACCENT_AND_CAPITAL_FLAG,
         "epochs_num": 700,
         "rows_per_example": 50,
         "hidden_conv_dim" :64, 
@@ -22,8 +22,8 @@ def run_single_benchmark(user:int, benchmark_file_path):
 
     args = pd.DataFrame([kwargs])
 
-    l, model_summary_df = train.train(
-        "../keystroke_data.sqlite", model_path='../models/test.pth', test_train_split=0, positive_negative_ratio=1, offset=1,
+    l, model_summary_df = train.train_with_crossvalidation(
+        "../keystroke_data.sqlite", model_path=f"../models/no_acc_and_cap/{user}.pth", test_train_split=0.2, positive_negative_ratio=1, offset=1,
             **kwargs)
 
 
@@ -45,21 +45,21 @@ def run_single_benchmark(user:int, benchmark_file_path):
 
 if __name__ == '__main__':
     user = int(sys.argv[1])
-    # for user in [60]:
-    # run_single_benchmark(user, f"user{user}.csv")
+    run_single_benchmark(user, f"user{user}.csv")
 
-    # to just train the model run
-    kwargs = {
-        "mode": train.LoadMode.MOST_COMMON_ONLY,
-        "epochs_num": 700,
-        "rows_per_example": 50,
-        "hidden_conv_dim" :64, 
-        "hidden_ff_dim": 128,
-        "user_id": user,
-        "num_layers": 2,
-        "use_fc_before": True
-    }
-    l, model_summary_df = train.train(
-        "../keystroke_data.sqlite", model_path='../models/test.pth', test_train_split=0, positive_negative_ratio=1, offset=1,
-            **kwargs)
+    # kwargs = {
+    #     "mode": train.LoadMode.MOST_COMMON_ONLY,
+    #     "epochs_num": 700,
+    #     "rows_per_example": 50,
+    #     "hidden_conv_dim" :64, 
+    #     "hidden_ff_dim": 128,
+    #     "user_id": user,
+    #     "num_layers": 2,
+    #     "use_fc_before": True
+    # }
+
+    # # train the proper model
+    # l, model_summary_df = train.train(
+    #     "../keystroke_data.sqlite", test_train_split=0, positive_negative_ratio=1, offset=1,
+    #         **kwargs)
  
